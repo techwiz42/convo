@@ -47,4 +47,38 @@ Enter an initial context when prompted.
 The AI will generate questions based on the context.
 Answer the questions or type 'exit' to end the session.
 
+## Unit Tests
+This set of unit tests covers the main functionality of the qa_cli.py script. Here's a breakdown of the test cases:
+
+**TestQuestionAnswerCLI**
+
+Tests the initialization of the **QuestionAnswerCLI** class.
+Tests the **generate_question** method.
+Tests the **interactive_session** method.
+
+
+**TestTrainModel**
+
+Tests the **train_model** function.
+
+
+**TestMain**
+
+Tests the **main** function for both training and interactive modes.
+
+
+
+### To run these tests:
+
+Save the test code above in a file named test_qa_cli.py in the same directory as your qa_cli.py file.
+Make sure you have the unittest module installed (it comes with Python standard library).
+Run the tests using the command: python -m unittest test_qa_cli.py
+
+These tests use mocking extensively to avoid actual model loading and training, 
+which would be time-consuming and unnecessary for unit testing. The tests focus on ensuring that:
+
+The correct methods are called with the expected arguments.
+The flow of the program is correct in different scenarios.
+The interactive session behaves as expected.
+
 

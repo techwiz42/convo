@@ -1,0 +1,24 @@
+{
+  "data": [
+    {
+      "context": "The Eiffel Tower, located in Paris, France, was completed in 1889. It was designed and built by engineer Gustave Eiffel for the 1889 World's Fair. Standing at 324 meters (1,063 ft) tall, it was the tallest man-made structure in the world for 41 years until the Chrysler Building in New York City was finished in 1930.",
+      "question": "Where is the Eiffel Tower located?",
+      "answer": "Paris, France"
+    },
+    {
+      "context": "The Eiffel Tower, located in Paris, France, was completed in 1889. It was designed and built by engineer Gustave Eiffel for the 1889 World's Fair. Standing at 324 meters (1,063 ft) tall, it was the tallest man-made structure in the world for 41 years until the Chrysler Building in New York City was finished in 1930.",
+      "question": "For how many years was the Eiffel Tower the tallest man-made structure in the world?",
+      "answer": "41 years"
+    },
+    {
+      "context": "Python is a high-level, interpreted programming language created by Guido van Rossum and first released in 1991. Its design philosophy emphasizes code readability with the use of significant indentation. Python is dynamically-typed and garbage-collected. It supports multiple programming paradigms, including structured, object-oriented, and functional programming.",
+      "question": "What is emphasized in Python's design philosophy?",
+      "answer": "code readability"
+    },
+    {
+      "context": "Python is a high-level, interpreted programming language created by Guido van Rossum and first released in 1991. Its design philosophy emphasizes code readability with the use of significant indentation. Python is dynamically-typed and garbage-collected. It supports multiple programming paradigms, including structured, object-oriented, and functional programming.",
+      "question": "What type of programming language is Python?",
+      "answer": "high-level, interpreted"
+    }
+  ]
+}

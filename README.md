@@ -90,5 +90,7 @@ The interactive session behaves as expected.
 - **qa_cli_v1.py** Avoid single word questions
 - **qa_cli_v2.py** Hybrid with pre-trained model and rule-based backup
 - **qa_cli_v3.py** Add sentiment analysis
-- **qa_cli_v4.py** Keeps track of questions, doesn't repeat. 
-
+- **qa_cli_v4.py** Keeps track of questions, doesn't repeat.
+- **qa_cli_v5.py** performs sentiment analysis on questions, selects question with the greatest absolute value 
+- **qa_cli_v6.py** tries to filter out nonsense questions
+- **qa_cli_v7.py** retries downloads

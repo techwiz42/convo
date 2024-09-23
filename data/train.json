@@ -1,34 +1,79 @@
 {
   "data": [
     {
-      "context": "The Eiffel Tower, located in Paris, France, was completed in 1889. It was designed and built by engineer Gustave Eiffel for the 1889 World's Fair. Standing at 324 meters (1,063 ft) tall, it was the tallest man-made structure in the world for 41 years until the Chrysler Building in New York City was finished in 1930.",
-      "question": "When was the Eiffel Tower completed?",
-      "answer": "1889"
+      "context": "The Amazon rainforest, spanning nine countries in South America, is the world's largest tropical rainforest. It covers over 5.5 million square kilometers and is home to an estimated 390 billion individual trees divided into 16,000 species.",
+      "question": "How many countries does the Amazon rainforest span?",
+      "answer": "Nine countries"
     },
     {
-      "context": "The Eiffel Tower, located in Paris, France, was completed in 1889. It was designed and built by engineer Gustave Eiffel for the 1889 World's Fair. Standing at 324 meters (1,063 ft) tall, it was the tallest man-made structure in the world for 41 years until the Chrysler Building in New York City was finished in 1930.",
-      "question": "Who designed the Eiffel Tower?",
-      "answer": "Gustave Eiffel"
+      "context": "The Great Wall of China is a series of fortifications and walls built across the historical northern borders of ancient Chinese states and Imperial China to protect against nomadic invasions. The most well-known sections were built by the Ming dynasty (1368–1644).",
+      "question": "During which dynasty were the most well-known sections of the Great Wall of China built?",
+      "answer": "The Ming dynasty"
     },
     {
-      "context": "The Eiffel Tower, located in Paris, France, was completed in 1889. It was designed and built by engineer Gustave Eiffel for the 1889 World's Fair. Standing at 324 meters (1,063 ft) tall, it was the tallest man-made structure in the world for 41 years until the Chrysler Building in New York City was finished in 1930.",
-      "question": "How tall is the Eiffel Tower?",
-      "answer": "324 meters (1,063 ft)"
+      "context": "Marie Curie was a Polish and naturalized-French physicist and chemist who conducted pioneering research on radioactivity. She was the first woman to win a Nobel Prize and the first person and only woman to win the Nobel Prize twice.",
+      "question": "What was Marie Curie's pioneering research focused on?",
+      "answer": "Radioactivity"
     },
     {
-      "context": "Python is a high-level, interpreted programming language created by Guido van Rossum and first released in 1991. Its design philosophy emphasizes code readability with the use of significant indentation. Python is dynamically-typed and garbage-collected. It supports multiple programming paradigms, including structured, object-oriented, and functional programming.",
-      "question": "Who created Python?",
-      "answer": "Guido van Rossum"
+      "context": "The theory of relativity, developed by Albert Einstein in the early 20th century, fundamentally changed our understanding of space, time, and gravity. It consists of two interrelated theories: special relativity and general relativity.",
+      "question": "Who developed the theory of relativity?",
+      "answer": "Albert Einstein"
     },
     {
-      "context": "Python is a high-level, interpreted programming language created by Guido van Rossum and first released in 1991. Its design philosophy emphasizes code readability with the use of significant indentation. Python is dynamically-typed and garbage-collected. It supports multiple programming paradigms, including structured, object-oriented, and functional programming.",
-      "question": "When was Python first released?",
-      "answer": "1991"
+      "context": "William Shakespeare, often called England's national poet and the 'Bard of Avon', is widely regarded as the greatest writer in the English language. He wrote approximately 37 plays and 154 sonnets, as well as other poems.",
+      "question": "How many plays did William Shakespeare write?",
+      "answer": "Approximately 37 plays"
     },
     {
-      "context": "Python is a high-level, interpreted programming language created by Guido van Rossum and first released in 1991. Its design philosophy emphasizes code readability with the use of significant indentation. Python is dynamically-typed and garbage-collected. It supports multiple programming paradigms, including structured, object-oriented, and functional programming.",
-      "question": "What programming paradigms does Python support?",
-      "answer": "structured, object-oriented, and functional programming"
+      "context": "The Olympic Games are a major international multi-sport event held once every four years. The Games were first held in Olympia, Greece, in 776 BC and were revived in Athens in 1896 for the modern era.",
+      "question": "Where were the first modern Olympic Games held?",
+      "answer": "Athens"
+    },
+    {
+      "context": "The Internet, a global system of interconnected computer networks, uses the Internet protocol suite (TCP/IP) to communicate between networks and devices. It is a network of networks that consists of private, public, academic, business, and government networks.",
+      "question": "What protocol suite does the Internet use for communication between networks and devices?",
+      "answer": "Internet protocol suite (TCP/IP)"
+    },
+    {
+      "context": "The human genome consists of approximately 3 billion base pairs of DNA packaged into 23 chromosomes. The Human Genome Project, completed in 2003, successfully sequenced and mapped all of the genes of the human genome.",
+      "question": "How many base pairs of DNA are in the human genome?",
+      "answer": "Approximately 3 billion"
+    },
+    {
+      "context": "The Mona Lisa, painted by Leonardo da Vinci in the early 16th century, is one of the most famous paintings in the world. It is known for the enigmatic smile of the woman in the half-length portrait and is housed in the Louvre Museum in Paris.",
+      "question": "Where is the Mona Lisa housed?",
+      "answer": "The Louvre Museum in Paris"
+    },
+    {
+      "context": "Climate change refers to long-term shifts in global weather patterns and average temperatures. Human activities, particularly the burning of fossil fuels, have been identified as a major contributor to the current trend of global warming.",
+      "question": "What human activity is identified as a major contributor to current global warming trends?",
+      "answer": "The burning of fossil fuels"
+    },
+    {
+      "context": "The periodic table is a tabular arrangement of chemical elements, organized based on their atomic number, electron configuration, and recurring chemical properties. It was first published by Russian chemist Dmitri Mendeleev in 1869.",
+      "question": "Who first published the periodic table of elements?",
+      "answer": "Dmitri Mendeleev"
+    },
+    {
+      "context": "The World Wide Web, invented by Sir Tim Berners-Lee in 1989, is an information system where documents and other resources are identified by URLs and can be accessed via the Internet. It has revolutionized communication and access to information globally.",
+      "question": "Who invented the World Wide Web?",
+      "answer": "Sir Tim Berners-Lee"
+    },
+    {
+      "context": "The Great Barrier Reef, located off the coast of Queensland in northeastern Australia, is the world's largest coral reef system. It is composed of over 2,900 individual reefs and 900 islands stretching for over 2,300 kilometers.",
+      "question": "How many individual reefs make up the Great Barrier Reef?",
+      "answer": "Over 2,900"
+    },
+    {
+      "context": "Photosynthesis is a process used by plants and other organisms to convert light energy into chemical energy that can later be released to fuel the organism's activities. This chemical energy is stored in carbohydrate molecules, such as sugars, which are synthesized from carbon dioxide and water.",
+      "question": "What type of energy does photosynthesis convert light energy into?",
+      "answer": "Chemical energy"
+    },
+    {
+      "context": "The French Revolution was a period of far-reaching social and political upheaval in France that lasted from 1789 until the late 1790s. It overthrew the monarchy, established a republic, catalyzed violent periods of political turmoil, and fundamentally altered French history.",
+      "question": "What form of government did the French Revolution overthrow?",
+      "answer": "The monarchy"
     }
   ]
 }

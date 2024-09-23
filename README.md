@@ -33,6 +33,10 @@ The **interactive_session method** in this class handles the continuous Q&A inte
 We've added a **train_model** function that allows users to train the model on their own dataset.
 The **main** function sets up command-line argument parsing to either train the model or start an interactive session.
 
+T5Tokenizer requires the SentencePiece library but it was not found in your environment. Checkout the instructions on the
+installation page of its repo: https://github.com/google/sentencepiece#installation and follow the ones
+that match your environment. Please note that you may need to restart your runtime after installation.
+
 ## To train a dataset 
 ```
 python qa_cli.py --train --data path/to/your/data.json --model ./qa_model

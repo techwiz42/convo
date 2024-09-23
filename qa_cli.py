@@ -2,6 +2,7 @@ import torch
 from transformers import T5ForConditionalGeneration, T5Tokenizer
 import argparse
 import os
+import json
 from typing import List, Dict, Any
 from torch.utils.data import DataLoader
 from datasets import Dataset
@@ -39,9 +40,28 @@ class QuestionAnswerCLI:
             input_text: str = f"generate question: {context} answer: {answer}"
         else:
             input_text: str = f"generate question: {context}"
-        input_ids: torch.Tensor = self.tokenizer(input_text, return_tensors="pt").input_ids.to(self.device)
-        outputs: torch.Tensor = self.model.generate(input_ids, max_length=64, num_return_sequences=1)
-        return self.tokenizer.decode(outputs[0], skip_special_tokens=True)
+        
+        print(f"Input text: {input_text}")  # Logging the input text
+        
+        input_ids: torch.Tensor = self.tokenizer(input_text, return_tensors="pt", max_length=512, truncation=True).input_ids.to(self.device)
+        
+        print(f"Input shape: {input_ids.shape}")  # Logging the input shape
+        
+        outputs: torch.Tensor = self.model.generate(
+            input_ids,
+            max_length=64,
+            num_return_sequences=1,
+            no_repeat_ngram_size=2,
+            do_sample=True,
+            top_k=50,
+            top_p=0.95,
+            temperature=0.7
+        )
+        
+        generated_question = self.tokenizer.decode(outputs[0], skip_special_tokens=True)
+        print(f"Generated question: {generated_question}")  # Logging the generated question
+        
+        return generated_question
 
     def interactive_session(self) -> None:
         """
@@ -49,35 +69,56 @@ class QuestionAnswerCLI:
         The session continues until the user types 'exit'.
         """
         context: str = input("Enter the initial context: ")
-        print("\nStarting Q&A session. Type 'exit' to end the session.\n")
+        print("\nStarting Q&A session. The AI will ask questions based on the context.")
+        print("You can respond to each question or type 'exit' to end the session.\n")
         
         while True:
             question: str = self.generate_question(context)
             print(f"AI: {question}")
             
-            answer: str = input("You: ")
-            if answer.lower() == 'exit':
+            user_input: str = input("Your response: ")
+            if user_input.lower() == 'exit':
                 break
             
-            context += f" {question} {answer}"
+            context += f" Question: {question} Answer: {user_input}"
 
         print("\nFinal context:")
         print(context)
 
-def train_model(data_path: str, output_path: str) -> None:
+def train_model(data_path: str, output_path: str, num_epochs: int) -> None:
     """
     Train a question generation model using the provided dataset and save it to the specified path.
+    If a model already exists at the output_path, it will be loaded and training will continue from there.
 
     Args:
         data_path (str): Path to the JSON file containing the training data
         output_path (str): Path where the trained model will be saved
+        num_epochs (int): Number of training epochs
     """
-    dataset: Dataset = Dataset.from_json(data_path)
+    print(f"Loading data from {data_path}")
+    with open(data_path, 'r') as f:
+        raw_data = json.load(f)
+    
+    data_dict = {
+        'context': [item['context'] for item in raw_data['data']],
+        'question': [item['question'] for item in raw_data['data']],
+        'answer': [item['answer'] for item in raw_data['data']]
+    }
+    
+    print("Creating dataset")
+    dataset = Dataset.from_dict(data_dict)
+    print(f"Dataset created with {len(dataset)} examples")
 
     # Initialize model and tokenizer
-    model_name: str = "t5-small"
-    tokenizer: T5Tokenizer = T5Tokenizer.from_pretrained(model_name)
-    model: T5ForConditionalGeneration = T5ForConditionalGeneration.from_pretrained(model_name)
+    if os.path.exists(output_path):
+        print(f"Loading existing model from {output_path}")
+        tokenizer: T5Tokenizer = T5Tokenizer.from_pretrained(output_path)
+        model: T5ForConditionalGeneration = T5ForConditionalGeneration.from_pretrained(output_path)
+    else:
+        print("Initializing new model")
+        model_name: str = "t5-small"
+        tokenizer: T5Tokenizer = T5Tokenizer.from_pretrained(model_name)
+        model: T5ForConditionalGeneration = T5ForConditionalGeneration.from_pretrained(model_name)
 
     def preprocess_function(examples: Dict[str, List[Any]]) -> Dict[str, List[Any]]:
         """
@@ -92,39 +133,69 @@ def train_model(data_path: str, output_path: str) -> None:
         inputs: List[str] = ["generate question: " + context + " answer: " + answer 
                   for context, answer in zip(examples["context"], examples["answer"])]
         targets: List[str] = examples["question"]
-        model_inputs: Dict[str, List[Any]] = tokenizer(inputs, max_length=512, truncation=True, padding="max_length")
+        
+        model_inputs = tokenizer(inputs, max_length=512, truncation=True, padding="max_length")
         with tokenizer.as_target_tokenizer():
-            labels: Dict[str, List[Any]] = tokenizer(targets, max_length=64, truncation=True, padding="max_length")
+            labels = tokenizer(targets, max_length=64, truncation=True, padding="max_length")
+        
         model_inputs["labels"] = labels["input_ids"]
+        
         return model_inputs
 
-    processed_dataset: Dataset = dataset.map(preprocess_function, batched=True, remove_columns=dataset.column_names)
-    train_dataloader: DataLoader = DataLoader(processed_dataset, shuffle=True, batch_size=8)
+    print("Preprocessing dataset")
+    processed_dataset = dataset.map(preprocess_function, batched=True, remove_columns=dataset.column_names)
+    processed_dataset.set_format(type='torch', columns=['input_ids', 'attention_mask', 'labels'])
+    print(f"Processed dataset created with {len(processed_dataset)} examples")
 
     # Training setup
     device: torch.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print(f"Using device: {device}")
     model.to(device)
 
+    train_dataloader: DataLoader = DataLoader(processed_dataset, shuffle=True, batch_size=8)
+
     optimizer: AdamW = AdamW(model.parameters(), lr=5e-5)
-    num_epochs: int = 3
     num_training_steps: int = num_epochs * len(train_dataloader)
-    lr_scheduler: get_linear_schedule_with_warmup = get_linear_schedule_with_warmup(
+    lr_scheduler = get_linear_schedule_with_warmup(
         optimizer, num_warmup_steps=0, num_training_steps=num_training_steps
     )
 
+    def process_batch_item(batch):
+        return {k: v.to(device) for k, v in batch.items()}
+
     # Training loop
+    print(f"Starting training for {num_epochs} epochs")
     model.train()
     for epoch in range(num_epochs):
+        print(f"Epoch {epoch+1}/{num_epochs}")
+        total_loss = 0
         for batch in train_dataloader:
-            batch: Dict[str, torch.Tensor] = {k: v.to(device) for k, v in batch.items()}
-            outputs: Any = model(**batch)
-            loss: torch.Tensor = outputs.loss
-            loss.backward()
-            optimizer.step()
-            lr_scheduler.step()
-            optimizer.zero_grad()
+            try:
+                # Process and move batch to device
+                processed_batch = process_batch_item(batch)
+                
+                outputs = model(**processed_batch)
+                loss = outputs.loss
+                total_loss += loss.item()
+                
+                loss.backward()
+                optimizer.step()
+                lr_scheduler.step()
+                optimizer.zero_grad()
+                
+                print(f"Batch processed successfully. Loss: {loss.item():.4f}")
+            except Exception as e:
+                print(f"Error processing batch: {e}")
+                print(f"Batch structure: {batch.keys()}")
+                for k, v in batch.items():
+                    print(f"{k}: {type(v)}, shape: {v.shape if hasattr(v, 'shape') else 'N/A'}")
+                continue  # Skip this batch and continue with the next one
+        
+        avg_loss = total_loss / len(train_dataloader)
+        print(f"Epoch {epoch+1} completed. Average loss: {avg_loss:.4f}")
 
     # Save the model
+    print(f"Saving model to {output_path}")
     model.save_pretrained(output_path)
     tokenizer.save_pretrained(output_path)
     print(f"Model saved to {output_path}")
@@ -137,13 +208,14 @@ def main() -> None:
     parser.add_argument("--train", action="store_true", help="Train the model")
     parser.add_argument("--data", type=str, help="Path to training data JSON file")
     parser.add_argument("--model", type=str, default="./qa_model", help="Path to save/load the model")
+    parser.add_argument("--epochs", type=int, default=3, help="Number of training epochs")
     args: argparse.Namespace = parser.parse_args()
 
     if args.train:
         if not args.data:
             print("Please provide a path to the training data using --data")
             return
-        train_model(args.data, args.model)
+        train_model(args.data, args.model, args.epochs)
     else:
         if not os.path.exists(args.model):
             print(f"Model not found at {args.model}. Please train the model first or provide a valid model path.")

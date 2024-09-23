@@ -1,4 +1,5 @@
 import torch
+from torch.cuda.amp import autocast, GradScaler
 from transformers import T5ForConditionalGeneration, T5Tokenizer
 import argparse
 import os
@@ -85,7 +86,7 @@ class QuestionAnswerCLI:
         print("\nFinal context:")
         print(context)
 
-def train_model(data_path: str, output_path: str, num_epochs: int) -> None:
+def train_model(data_path: str, output_path: str, num_epochs: int, device: str = None) -> None:
     """
     Train a question generation model using the provided dataset and save it to the specified path.
     If a model already exists at the output_path, it will be loaded and training will continue from there.
@@ -94,7 +95,14 @@ def train_model(data_path: str, output_path: str, num_epochs: int) -> None:
         data_path (str): Path to the JSON file containing the training data
         output_path (str): Path where the trained model will be saved
         num_epochs (int): Number of training epochs
+        device (str, optional): Device to use for training ('cuda', 'cpu', or None for auto-detect)
     """
+    if device is None:
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    else:
+        device = torch.device(device)
+    print(f"Using device: {device}")
+
     print(f"Loading data from {data_path}")
     with open(data_path, 'r') as f:
         raw_data = json.load(f)
@@ -119,6 +127,8 @@ def train_model(data_path: str, output_path: str, num_epochs: int) -> None:
         model_name: str = "t5-small"
         tokenizer: T5Tokenizer = T5Tokenizer.from_pretrained(model_name)
         model: T5ForConditionalGeneration = T5ForConditionalGeneration.from_pretrained(model_name)
+
+    model.to(device)
 
     def preprocess_function(examples: Dict[str, List[Any]]) -> Dict[str, List[Any]]:
         """
@@ -147,11 +157,6 @@ def train_model(data_path: str, output_path: str, num_epochs: int) -> None:
     processed_dataset.set_format(type='torch', columns=['input_ids', 'attention_mask', 'labels'])
     print(f"Processed dataset created with {len(processed_dataset)} examples")
 
-    # Training setup
-    device: torch.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print(f"Using device: {device}")
-    model.to(device)
-
     train_dataloader: DataLoader = DataLoader(processed_dataset, shuffle=True, batch_size=8)
 
     optimizer: AdamW = AdamW(model.parameters(), lr=5e-5)
@@ -160,29 +165,29 @@ def train_model(data_path: str, output_path: str, num_epochs: int) -> None:
         optimizer, num_warmup_steps=0, num_training_steps=num_training_steps
     )
 
-    def process_batch_item(batch):
-        return {k: v.to(device) for k, v in batch.items()}
-
     # Training loop
     print(f"Starting training for {num_epochs} epochs")
     model.train()
+    scaler = GradScaler()
     for epoch in range(num_epochs):
         print(f"Epoch {epoch+1}/{num_epochs}")
         total_loss = 0
         for batch in train_dataloader:
             try:
                 # Process and move batch to device
-                processed_batch = process_batch_item(batch)
+                processed_batch = {k: v.to(device) for k, v in batch.items()}
                 
-                outputs = model(**processed_batch)
-                loss = outputs.loss
-                total_loss += loss.item()
-                
-                loss.backward()
-                optimizer.step()
-                lr_scheduler.step()
+                with autocast():
+                    outputs = model(**processed_batch)
+                    loss = outputs.loss
+
+                scaler.scale(loss).backward()
+                scaler.step(optimizer)
+                scaler.update()
                 optimizer.zero_grad()
+                lr_scheduler.step()
                 
+                total_loss += loss.item()
                 print(f"Batch processed successfully. Loss: {loss.item():.4f}")
             except Exception as e:
                 print(f"Error processing batch: {e}")
@@ -209,13 +214,14 @@ def main() -> None:
     parser.add_argument("--data", type=str, help="Path to training data JSON file")
     parser.add_argument("--model", type=str, default="./qa_model", help="Path to save/load the model")
     parser.add_argument("--epochs", type=int, default=3, help="Number of training epochs")
+    parser.add_argument("--device", type=str, choices=['cuda', 'cpu'], help="Device to use for training")
     args: argparse.Namespace = parser.parse_args()
 
     if args.train:
         if not args.data:
             print("Please provide a path to the training data using --data")
             return
-        train_model(args.data, args.model, args.epochs)
+        train_model(args.data, args.model, args.epochs, args.device)
     else:
         if not os.path.exists(args.model):
             print(f"Model not found at {args.model}. Please train the model first or provide a valid model path.")

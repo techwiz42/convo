@@ -85,4 +85,10 @@ The correct methods are called with the expected arguments.
 The flow of the program is correct in different scenarios.
 The interactive session behaves as expected.
 
+### Versions
+- **qa_cli.py** First approximation
+- **qa_cli_v1.py** Avoid single word questions
+- **qa_cli_v2.py** Hybrid with pre-trained model and rule-based backup
+- **qa_cli_v3.py** Add sentiment analysis
+- **qa_cli_v4.py** Keeps track of questions, doesn't repeat. 
 

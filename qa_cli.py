@@ -42,7 +42,7 @@ class QuestionAnswerCLI:
         else:
             input_text: str = f"generate question: {context}"
         
-        print(f"Input text: {input_text}")  # Logging the input text
+        #print(f"Input text: {input_text}")  # Logging the input text
         
         input_ids: torch.Tensor = self.tokenizer(input_text, return_tensors="pt", max_length=512, truncation=True).input_ids.to(self.device)
         
@@ -60,7 +60,7 @@ class QuestionAnswerCLI:
         )
         
         generated_question = self.tokenizer.decode(outputs[0], skip_special_tokens=True)
-        print(f"Generated question: {generated_question}")  # Logging the generated question
+        #print(f"Generated question: {generated_question}")  # Logging the generated question
         
         return generated_question
 
@@ -75,13 +75,13 @@ class QuestionAnswerCLI:
         
         while True:
             question: str = self.generate_question(context)
-            print(f"AI: {question}")
+            print(f"AI: {question}?")
             
             user_input: str = input("Your response: ")
             if user_input.lower() == 'exit':
                 break
             
-            context += f" Question: {question} Answer: {user_input}"
+            context += f" Question: {question} Answer: {user_input}?"
 
         print("\nFinal context:")
         print(context)

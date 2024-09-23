@@ -1,0 +1,105 @@
+import torch
+from transformers import T5ForConditionalGeneration, T5Tokenizer
+import argparse
+import random
+import nltk
+from nltk.tokenize import sent_tokenize, word_tokenize
+from nltk.tag import pos_tag
+from nltk.chunk import ne_chunk
+
+# Download necessary NLTK data
+nltk.download('punkt', quiet=True)
+nltk.download('averaged_perceptron_tagger', quiet=True)
+nltk.download('maxent_ne_chunker', quiet=True)
+nltk.download('words', quiet=True)
+
+class QuestionAnswerCLI:
+    def __init__(self, model_name: str = "t5-base"):
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.tokenizer = T5Tokenizer.from_pretrained(model_name)
+        self.model = T5ForConditionalGeneration.from_pretrained(model_name).to(self.device)
+
+    def generate_question(self, context: str) -> str:
+        input_text = f"generate question: {context}"
+        input_ids = self.tokenizer(input_text, return_tensors="pt", max_length=512, truncation=True).input_ids.to(self.device)
+
+        outputs = self.model.generate(
+            input_ids,
+            max_length=64,
+            num_return_sequences=5,
+            no_repeat_ngram_size=2,
+            do_sample=True,
+            top_k=50,
+            top_p=0.95,
+            temperature=0.7
+        )
+
+        questions = [self.tokenizer.decode(output, skip_special_tokens=True) for output in outputs]
+        print(f"Model generated questions: {questions}")
+
+        valid_questions = [q for q in questions if len(q.split()) > 3 and q.lower() not in ["true", "false"]]
+
+        if valid_questions:
+            return random.choice(valid_questions)
+        else:
+            return self.generate_rule_based_question(context)
+
+    def generate_rule_based_question(self, context: str) -> str:
+        sentences = sent_tokenize(context)
+        if not sentences:
+            return "Can you provide more information about this topic?"
+
+        sentence = random.choice(sentences)
+        words = word_tokenize(sentence)
+        tagged = pos_tag(words)
+        chunked = ne_chunk(tagged)
+
+        for subtree in chunked:
+            if type(subtree) == nltk.Tree:
+                entity_type = subtree.label()
+                entity = " ".join([word for word, tag in subtree.leaves()])
+                if entity_type == 'PERSON':
+                    return f"Who is {entity}?"
+                elif entity_type in ['GPE', 'LOCATION']:
+                    return f"Where is {entity}?"
+                elif entity_type == 'ORGANIZATION':
+                    return f"What is {entity}?"
+
+        # If no named entity is found, try to generate a question based on POS tags
+        for word, tag in tagged:
+            if tag.startswith('NN'):  # Noun
+                return f"What can you tell me about {word}?"
+            elif tag.startswith('VB'):  # Verb
+                return f"What does it mean to {word}?"
+
+        # If all else fails, use a generic question
+        return f"What is the main idea of this sentence: '{sentence}'?"
+
+    def interactive_session(self) -> None:
+        context = input("Enter the initial context: ")
+        print("\nStarting Q&A session. The AI will ask questions based on the context.")
+        print("You can respond to each question or type 'exit' to end the session.\n")
+
+        while True:
+            question = self.generate_question(context)
+            print(f"AI: {question}")
+
+            user_input = input("Your response: ")
+            if user_input.lower() == 'exit':
+                break
+
+            context += f" {question} {user_input}"
+
+        print("\nFinal context:")
+        print(context)
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Question-Answer CLI Application")
+    parser.add_argument("--model", type=str, default="t5-base", help="Name of the pre-trained model to use")
+    args = parser.parse_args()
+
+    cli = QuestionAnswerCLI(args.model)
+    cli.interactive_session()
+
+if __name__ == "__main__":
+    main()

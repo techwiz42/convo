@@ -20,16 +20,26 @@ nltk.download('vader_lexicon', quiet=True)
 class QuestionAnswerCLI:
     def __init__(self, model_name: str = "t5-base"):
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        print(f"Using device: {self.device}")
+        
+        print("Loading tokenizer...")
         self.tokenizer = T5Tokenizer.from_pretrained(model_name)
+        
+        print("Loading model...")
         self.model = T5ForConditionalGeneration.from_pretrained(model_name).to(self.device)
+        
         self.sia = SentimentIntensityAnalyzer()
         self.previous_questions = set()
         self.user_name = ""
         self.sentiment_cache = {}
         
-        # Load pre-trained model for question quality assessment
+        print("Loading BERT model for question quality assessment...")
         self.quality_model = BertForSequenceClassification.from_pretrained('bert-base-uncased').to(self.device)
+        
+        print("Loading BERT tokenizer...")
         self.quality_tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
+        
+        print("All models loaded successfully!")
 
     @lru_cache(maxsize=1000)
     def tokenize(self, text: str):
@@ -72,7 +82,7 @@ class QuestionAnswerCLI:
 
     def is_valid_question(self, question):
         # Enhanced heuristic rules
-        if len(question.split()) < 3:
+        if len(question.split()) < 5:  # Increased minimum length
             return False
         if not question.endswith('?'):
             return False
@@ -82,7 +92,9 @@ class QuestionAnswerCLI:
             return False
         if re.search(r"\b[a-z]'s\b", question):  # Check for lowercase word followed by 's
             return False
-        if "your thoughts on" in question.lower() and len(question.split()) < 6:
+        if "your thoughts on" in question.lower() and len(question.split()) < 8:  # Increased minimum length for this type
+            return False
+        if re.search(r'\b(a|an|the)\s+\w+\?', question):  # Check for questions ending with a single word after an article
             return False
         return True
 
@@ -108,16 +120,16 @@ class QuestionAnswerCLI:
 
     def adjust_question_for_sentiment(self, question: str, sentiment: float) -> str:
         if sentiment > 0.05:
-            return f"That's interesting, {self.user_name}! {question}"
+            return f"That's interesting! {question}"
         elif sentiment < -0.05:
-            return f"I understand this might be challenging, {self.user_name}. {question}"
+            return f"I understand this might be challenging. {question}"
         else:
-            return f"{self.user_name}, {question}"
+            return question
 
     def generate_rule_based_question(self, context: str, sentiment: float) -> str:
         sentences = sent_tokenize(context)
         if not sentences:
-            return f"{self.user_name}, can you provide more information about this topic?"
+            return "Can you provide more information about this topic?"
 
         sentence = random.choice(sentences)
         words = word_tokenize(sentence)
@@ -133,15 +145,21 @@ class QuestionAnswerCLI:
                     self.previous_questions.add(question)
                     return question
 
+        # Filter words to use in questions
+        valid_words = [word for word, tag in tagged if len(word) > 2 and tag.startswith(('NN', 'VB', 'JJ'))]
+        
+        if not valid_words:
+            return "Can you elaborate more on this topic?"
+
         general_questions = [
-            f"{self.user_name}, what are your thoughts on the topic of {random.choice(words)}?",
-            f"How does the concept of {random.choice(words)} relate to the overall topic, {self.user_name}?",
-            f"{self.user_name}, can you elaborate on the idea of {random.choice(words)}?",
-            f"What's the significance of {random.choice(words)} in this context, {self.user_name}?",
-            f"{self.user_name}, how does this information connect to your personal experiences?",
-            f"What potential implications do you see from this information, {self.user_name}?",
-            f"{self.user_name}, how might this topic evolve in the future?",
-            f"What questions does this raise for you, {self.user_name}?"
+            f"What are your thoughts on the concept of {random.choice(valid_words)}?",
+            f"How does the idea of {random.choice(valid_words)} relate to the overall topic?",
+            f"Can you elaborate on the significance of {random.choice(valid_words)}?",
+            f"What's the importance of {random.choice(valid_words)} in this context?",
+            f"How does the concept of {random.choice(valid_words)} connect to your personal experiences?",
+            f"What potential implications do you see from the idea of {random.choice(valid_words)}?",
+            f"How might the concept of {random.choice(valid_words)} evolve in the future?",
+            f"What questions does the idea of {random.choice(valid_words)} raise for you?"
         ]
 
         for question in general_questions:
@@ -149,30 +167,30 @@ class QuestionAnswerCLI:
                 self.previous_questions.add(question)
                 return self.adjust_question_for_sentiment(question, sentiment)
 
-        return f"{self.user_name}, can you share any additional insights on this topic?"
+        return "Can you share any additional insights on this topic?"
 
     def generate_entity_question(self, entity: str, entity_type: str, sentiment: float) -> str:
         if sentiment > 0.05:
             questions = [
-                f"{self.user_name}, what aspects of {entity} do you find most intriguing?",
-                f"How has {entity} positively impacted this field, {self.user_name}?",
-                f"{self.user_name}, what potential do you see for {entity} in the future?"
+                f"What aspects of {entity} do you find most intriguing?",
+                f"How has {entity} positively impacted this field?",
+                f"What potential do you see for {entity} in the future?"
             ]
         elif sentiment < -0.05:
             questions = [
-                f"{self.user_name}, what challenges do you think {entity} faces?",
-                f"How might the issues with {entity} be addressed, {self.user_name}?",
-                f"{self.user_name}, what alternatives to {entity} might be worth considering?"
+                f"What challenges do you think {entity} faces?",
+                f"How might the issues with {entity} be addressed?",
+                f"What alternatives to {entity} might be worth considering?"
             ]
         else:
             if entity_type == 'PERSON':
-                questions = [f"Who is {entity}, {self.user_name}?", f"{self.user_name}, what is {entity} known for?", f"How has {entity} influenced this field, {self.user_name}?"]
+                questions = [f"Who is {entity}?", f"What is {entity} known for?", f"How has {entity} influenced this field?"]
             elif entity_type in ['GPE', 'LOCATION']:
-                questions = [f"Where is {entity}, {self.user_name}?", f"{self.user_name}, what's significant about {entity}?", f"How does {entity} relate to the topic, {self.user_name}?"]
+                questions = [f"Where is {entity}?", f"What's significant about {entity}?", f"How does {entity} relate to the topic?"]
             elif entity_type == 'ORGANIZATION':
-                questions = [f"What is {entity}, {self.user_name}?", f"{self.user_name}, what role does {entity} play in this context?", f"How has {entity} evolved over time, {self.user_name}?"]
+                questions = [f"What is {entity}?", f"What role does {entity} play in this context?", f"How has {entity} evolved over time?"]
             else:
-                questions = [f"{self.user_name}, what can you tell me about {entity}?", f"How does {entity} fit into the broader picture, {self.user_name}?", f"{self.user_name}, what's your perspective on {entity}?"]
+                questions = [f"What can you tell me about {entity}?", f"How does {entity} fit into the broader picture?", f"What's your perspective on {entity}?"]
 
         return random.choice(questions)
 
@@ -210,9 +228,9 @@ class QuestionAnswerCLI:
         context = input("Enter the initial context (or press Enter to start with a blank context): ")
         if not context:
             print("\nLet's start our Q&A session.")
-            print("The AI will ask questions, and you can respond to each question or type 'exit' to end the session.\n")
+            print("I will ask questions, and you can respond to each question or type 'exit' to end the session.\n")
         else:
-            print("\nStarting Q&A session. The AI will ask questions based on the context you provided.")
+            print("\nStarting Q&A session. I will ask questions based on the context you provided.")
             print("You can respond to each question or type 'exit' to end the session.\n")
 
         sentiment = 0  # Start with neutral sentiment
@@ -230,7 +248,9 @@ class QuestionAnswerCLI:
 
             ai_answer = self.generate_answers(question, context + " " + user_input)
 
-            context += f" Question: {question} Answer: {user_input} AI's Response: {ai_answer}"
+            # Filter out 'AI' and 'Answer' from the context
+            filtered_context = re.sub(r'\b(AI|Answer|Response|Question):', '', context)
+            context = f"{filtered_context} {user_input}"
 
         print(f"\nThank you for the conversation, {self.user_name}!")
         print("\nFinal context:")
@@ -241,8 +261,12 @@ def main() -> None:
     parser.add_argument("--model", type=str, default="t5-base", help="Name of the pre-trained model to use")
     args = parser.parse_args()
 
-    cli = QuestionAnswerCLI(args.model)
-    cli.interactive_session()
+    try:
+        cli = QuestionAnswerCLI(args.model)
+        cli.interactive_session()
+    except Exception as e:
+        print(f"An error occurred: {str(e)}")
+        print("Please check your internet connection and try again.")
 
 if __name__ == "__main__":
     main()

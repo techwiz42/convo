@@ -1,24 +1,17 @@
 import torch
-from transformers import T5ForConditionalGeneration, T5Tokenizer, BertForSequenceClassification, BertTokenizer
+from transformers import T5ForConditionalGeneration, T5Tokenizer
 import argparse
 import random
 import nltk
 from nltk.tokenize import sent_tokenize, word_tokenize
 from nltk.tag import pos_tag
-from nltk.chunk import ne_chunk
 from nltk.sentiment import SentimentIntensityAnalyzer
 from functools import lru_cache
 import re
-import time
-from tqdm import tqdm
-import requests
-from requests.exceptions import RequestException
 
 # Download necessary NLTK data
 nltk.download('punkt', quiet=True)
 nltk.download('averaged_perceptron_tagger', quiet=True)
-nltk.download('maxent_ne_chunker', quiet=True)
-nltk.download('words', quiet=True)
 nltk.download('vader_lexicon', quiet=True)
 
 class QuestionAnswerCLI:
@@ -27,104 +20,80 @@ class QuestionAnswerCLI:
         print(f"Using device: {self.device}")
         
         print("Loading tokenizer...")
-        self.tokenizer = self.load_with_retry(T5Tokenizer.from_pretrained, model_name)
+        self.tokenizer = T5Tokenizer.from_pretrained(model_name)
         
         print("Loading model...")
-        self.model = self.load_with_retry(T5ForConditionalGeneration.from_pretrained, model_name)
-        self.model.to(self.device)
+        self.model = T5ForConditionalGeneration.from_pretrained(model_name).to(self.device)
         
         self.sia = SentimentIntensityAnalyzer()
         self.previous_questions = set()
         self.user_name = ""
         self.sentiment_cache = {}
         
-        print("Loading BERT model for question quality assessment...")
-        self.quality_model = self.load_with_retry(BertForSequenceClassification.from_pretrained, 'bert-base-uncased')
-        self.quality_model.to(self.device)
-        
-        print("Loading BERT tokenizer...")
-        self.quality_tokenizer = self.load_with_retry(BertTokenizer.from_pretrained, 'bert-base-uncased')
-        
         print("All models loaded successfully!")
-
-    def load_with_retry(self, load_func, model_name, max_retries=3, timeout=300):
-        for attempt in range(max_retries):
-            try:
-                return load_func(model_name, local_files_only=False, timeout=timeout)
-            except Exception as e:
-                print(f"Attempt {attempt + 1} failed: {str(e)}")
-                if attempt == max_retries - 1:
-                    raise Exception(f"Failed to load model after {max_retries} attempts.")
-                print("Retrying in 5 seconds...")
-                time.sleep(5)
 
     @lru_cache(maxsize=1000)
     def tokenize(self, text: str):
         return self.tokenizer(text, return_tensors="pt", max_length=512, truncation=True).input_ids.to(self.device)
 
     def generate_question(self, context: str, sentiment: float) -> str:
-        input_text = f"generate question: {context}"
-        input_ids = self.tokenize(input_text)
-
-        outputs = self.model.generate(
-            input_ids,
+        # Step 1: Generate potential topics
+        topic_input = f"Extract key topics from: {context}"
+        topic_ids = self.tokenize(topic_input)
+        
+        topic_outputs = self.model.generate(
+            topic_ids,
             max_length=64,
-            num_return_sequences=10,
+            num_return_sequences=5,
             no_repeat_ngram_size=2,
             do_sample=True,
             top_k=50,
             top_p=0.95,
             temperature=0.7
         )
-
-        questions = [self.tokenizer.decode(output, skip_special_tokens=True) for output in outputs]
-        filtered_questions = self.filter_questions(questions)
         
-        if filtered_questions:
-            selected_question = self.select_non_repetitive_question(filtered_questions, sentiment)
-            if selected_question:
-                return selected_question
+        topics = [self.tokenizer.decode(output, skip_special_tokens=True) for output in topic_outputs]
+        print("Generated topics:", topics)
+        
+        # Step 2: Generate questions based on topics
+        for topic in topics:
+            question_input = f"Generate a question about {topic}. The question must end with a question mark."
+            question_ids = self.tokenize(question_input)
+            
+            question_outputs = self.model.generate(
+                question_ids,
+                max_length=64,
+                num_return_sequences=10,
+                no_repeat_ngram_size=2,
+                do_sample=True,
+                top_k=50,
+                top_p=0.95,
+                temperature=0.9
+            )
+            
+            questions = [self.tokenizer.decode(output, skip_special_tokens=True) for output in question_outputs]
+            print(f"Generated questions for topic '{topic}':", questions)
+            
+            filtered_questions = self.filter_questions(questions)
+            if filtered_questions:
+                selected_question = self.select_non_repetitive_question(filtered_questions, sentiment)
+                if selected_question:
+                    return selected_question
 
-        return self.generate_rule_based_question(context, sentiment)
+        print("Failed to generate a valid question. Falling back to default questions.")
+        return self.generate_fallback_question(context, sentiment)
 
     def filter_questions(self, questions):
-        filtered = []
-        for question in questions:
-            if self.is_valid_question(question):
-                quality_score = self.assess_question_quality(question)
-                perplexity = self.calculate_perplexity(question)
-                if quality_score > 0.7 and perplexity < 100:  # Adjust these thresholds as needed
-                    filtered.append(question)
-        return filtered
+        return [q for q in questions if self.is_valid_question(q)]
 
     def is_valid_question(self, question):
-        # Enhanced heuristic rules
-        if len(question.split()) < 3:
+        if len(question.split()) < 4:
             return False
         if not question.endswith('?'):
             return False
-        if not re.match(r'^[A-Z]', question):  # Check if it starts with a capital letter
-            return False
-        if re.search(r"\b's\b", question):  # Check for standalone 's
-            return False
-        if re.search(r"\b[a-z]'s\b", question):  # Check for lowercase word followed by 's
-            return False
-        if "your thoughts on" in question.lower() and len(question.split()) < 6:
+        if not re.match(r'^[A-Z]', question):
             return False
         return True
-
-    def assess_question_quality(self, question):
-        inputs = self.quality_tokenizer(question, return_tensors="pt", truncation=True, padding=True).to(self.device)
-        with torch.no_grad():
-            outputs = self.quality_model(**inputs)
-        scores = torch.nn.functional.softmax(outputs.logits, dim=1)
-        return scores[:, 1].item()  # Assuming binary classification (bad:0, good:1)
-
-    def calculate_perplexity(self, question):
-        input_ids = self.tokenizer.encode(question, return_tensors="pt").to(self.device)
-        with torch.no_grad():
-            outputs = self.model(input_ids, labels=input_ids)
-        return torch.exp(outputs.loss).item()
 
     def select_non_repetitive_question(self, questions: list, sentiment: float) -> str:
         for question in questions:
@@ -135,73 +104,49 @@ class QuestionAnswerCLI:
 
     def adjust_question_for_sentiment(self, question: str, sentiment: float) -> str:
         if sentiment > 0.05:
-            return f"That's interesting, {self.user_name}! {question}"
+            return f"That's interesting! {question}"
         elif sentiment < -0.05:
-            return f"I understand this might be challenging, {self.user_name}. {question}"
+            return f"I understand this might be challenging. {question}"
         else:
-            return f"{self.user_name}, {question}"
+            return question
 
-    def generate_rule_based_question(self, context: str, sentiment: float) -> str:
+    def extract_nouns(self, sentence):
+        words = word_tokenize(sentence)
+        tagged_words = pos_tag(words)
+        nouns = [word for word, pos in tagged_words if pos.startswith('NN')]
+        return nouns
+
+    def generate_fallback_question(self, context: str, sentiment: float) -> str:
         sentences = sent_tokenize(context)
         if not sentences:
-            return f"{self.user_name}, can you provide more information about this topic?"
+            return "Can you provide more information about this topic?"
 
-        sentence = random.choice(sentences)
-        words = word_tokenize(sentence)
-        tagged = pos_tag(words)
-        chunked = ne_chunk(tagged)
+        all_nouns = []
+        for sentence in sentences:
+            all_nouns.extend(self.extract_nouns(sentence))
 
-        for subtree in chunked:
-            if type(subtree) == nltk.Tree:
-                entity_type = subtree.label()
-                entity = " ".join([word for word, tag in subtree.leaves()])
-                question = self.generate_entity_question(entity, entity_type, sentiment)
-                if question not in self.previous_questions and self.is_valid_question(question):
-                    self.previous_questions.add(question)
-                    return question
-
-        general_questions = [
-            f"{self.user_name}, what are your thoughts on the topic of {random.choice(words)}?",
-            f"How does the concept of {random.choice(words)} relate to the overall topic, {self.user_name}?",
-            f"{self.user_name}, can you elaborate on the idea of {random.choice(words)}?",
-            f"What's the significance of {random.choice(words)} in this context, {self.user_name}?",
-            f"{self.user_name}, how does this information connect to your personal experiences?",
-            f"What potential implications do you see from this information, {self.user_name}?",
-            f"{self.user_name}, how might this topic evolve in the future?",
-            f"What questions does this raise for you, {self.user_name}?"
-        ]
-
-        for question in general_questions:
-            if question not in self.previous_questions and self.is_valid_question(question):
-                self.previous_questions.add(question)
-                return self.adjust_question_for_sentiment(question, sentiment)
-
-        return f"{self.user_name}, can you share any additional insights on this topic?"
-
-    def generate_entity_question(self, entity: str, entity_type: str, sentiment: float) -> str:
-        if sentiment > 0.05:
-            questions = [
-                f"{self.user_name}, what aspects of {entity} do you find most intriguing?",
-                f"How has {entity} positively impacted this field, {self.user_name}?",
-                f"{self.user_name}, what potential do you see for {entity} in the future?"
+        if all_nouns:
+            random_noun = random.choice(all_nouns)
+            noun_questions = [
+                f"Can you tell me more about {random_noun}?",
+                f"What are your thoughts on {random_noun}?",
+                f"How does {random_noun} relate to this topic?",
+                f"What's the significance of {random_noun} in this context?",
+                f"How would you explain {random_noun} to someone new to this topic?"
             ]
-        elif sentiment < -0.05:
-            questions = [
-                f"{self.user_name}, what challenges do you think {entity} faces?",
-                f"How might the issues with {entity} be addressed, {self.user_name}?",
-                f"{self.user_name}, what alternatives to {entity} might be worth considering?"
-            ]
+            question = random.choice(noun_questions)
         else:
-            if entity_type == 'PERSON':
-                questions = [f"Who is {entity}, {self.user_name}?", f"{self.user_name}, what is {entity} known for?", f"How has {entity} influenced this field, {self.user_name}?"]
-            elif entity_type in ['GPE', 'LOCATION']:
-                questions = [f"Where is {entity}, {self.user_name}?", f"{self.user_name}, what's significant about {entity}?", f"How does {entity} relate to the topic, {self.user_name}?"]
-            elif entity_type == 'ORGANIZATION':
-                questions = [f"What is {entity}, {self.user_name}?", f"{self.user_name}, what role does {entity} play in this context?", f"How has {entity} evolved over time, {self.user_name}?"]
-            else:
-                questions = [f"{self.user_name}, what can you tell me about {entity}?", f"How does {entity} fit into the broader picture, {self.user_name}?", f"{self.user_name}, what's your perspective on {entity}?"]
+            general_questions = [
+                "What are your thoughts on this topic?",
+                "How does this relate to your experiences?",
+                "Can you elaborate on this further?",
+                "What implications do you see from this?",
+                "How might this concept evolve in the future?",
+                "What questions does this raise for you?"
+            ]
+            question = random.choice(general_questions)
 
-        return random.choice(questions)
+        return self.adjust_question_for_sentiment(question, sentiment)
 
     def analyze_sentiment(self, text: str) -> float:
         if text in self.sentiment_cache:
@@ -237,9 +182,9 @@ class QuestionAnswerCLI:
         context = input("Enter the initial context (or press Enter to start with a blank context): ")
         if not context:
             print("\nLet's start our Q&A session.")
-            print("The AI will ask questions, and you can respond to each question or type 'exit' to end the session.\n")
+            print("I will ask questions, and you can respond to each question or type 'exit' to end the session.\n")
         else:
-            print("\nStarting Q&A session. The AI will ask questions based on the context you provided.")
+            print("\nStarting Q&A session. I will ask questions based on the context you provided.")
             print("You can respond to each question or type 'exit' to end the session.\n")
 
         sentiment = 0  # Start with neutral sentiment
@@ -257,7 +202,9 @@ class QuestionAnswerCLI:
 
             ai_answer = self.generate_answers(question, context + " " + user_input)
 
-            context += f" Question: {question} Answer: {user_input} AI's Response: {ai_answer}"
+            # Filter out 'AI' and 'Answer' from the context
+            filtered_context = re.sub(r'\b(AI|Answer|Response|Question):', '', context)
+            context = f"{filtered_context} {user_input}"
 
         print(f"\nThank you for the conversation, {self.user_name}!")
         print("\nFinal context:")

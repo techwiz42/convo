@@ -153,7 +153,7 @@ class QuestionAnswerCLI:
 
         general_questions = [
             f"What are your thoughts on the concept of {random.choice(valid_words)}?",
-            f"How does the idea of {random.choice(valid_words)} relate to the overall topic?",
+            f"How does the idea of {random.choice(valid_words)} relate to {random.choice(valid_words)}?",
             f"Can you elaborate on the significance of {random.choice(valid_words)}?",
             f"What's the importance of {random.choice(valid_words)} in this context?",
             f"How does the concept of {random.choice(valid_words)} connect to your personal experiences?",
@@ -161,36 +161,49 @@ class QuestionAnswerCLI:
             f"How might the concept of {random.choice(valid_words)} evolve in the future?",
             f"What questions does the idea of {random.choice(valid_words)} raise for you?"
         ]
-
-        for question in general_questions:
-            if question not in self.previous_questions and self.is_valid_question(question):
-                self.previous_questions.add(question)
-                return self.adjust_question_for_sentiment(question, sentiment)
-
-        return "Can you share any additional insights on this topic?"
+        #pick a general question
+        question = general_questions[random.randint(0, len(general_questions)-1)]
+        if question not in self.previous_questions and self.is_valid_question(question):
+            self.previous_questions.add(question)
+            return self.adjust_question_for_sentiment(question, sentiment)
+        #could not pick a good question
+        return f"Can you share any additional insights on {random.choice(valid_words)}?"
 
     def generate_entity_question(self, entity: str, entity_type: str, sentiment: float) -> str:
         if sentiment > 0.05:
             questions = [
                 f"What aspects of {entity} do you find most intriguing?",
                 f"How has {entity} positively impacted this field?",
-                f"What potential do you see for {entity} in the future?"
+                f"What potential do you see for {entity} in the future?",
+                f"What does {entity} mean to you?",
+                f"How do you imagine that {entity} could be improved?",
+                f"Tell me more about your experiences with {entity}."
             ]
         elif sentiment < -0.05:
             questions = [
                 f"What challenges do you think {entity} faces?",
                 f"How might the issues with {entity} be addressed?",
-                f"What alternatives to {entity} might be worth considering?"
+                f"What alternatives to {entity} might be worth considering?",
+                f"Did you find {entity} to be difficult to manage?",
+                f"Would you consider {entity} in the future?"
             ]
         else:
             if entity_type == 'PERSON':
-                questions = [f"Who is {entity}?", f"What is {entity} known for?", f"How has {entity} influenced this field?"]
+                questions = [f"Who is {entity}?", 
+                             f"What is {entity} known for?", 
+                             f"How has {entity} influenced this field?"]
             elif entity_type in ['GPE', 'LOCATION']:
-                questions = [f"Where is {entity}?", f"What's significant about {entity}?", f"How does {entity} relate to the topic?"]
+                questions = [f"Where is {entity}?", 
+                             f"What's significant about {entity}?", 
+                             f"How does {entity} relate to the topic?"]
             elif entity_type == 'ORGANIZATION':
-                questions = [f"What is {entity}?", f"What role does {entity} play in this context?", f"How has {entity} evolved over time?"]
+                questions = [f"What is {entity}?",
+                             f"What role does {entity} play in this context?",
+                             f"How has {entity} evolved over time?"]
             else:
-                questions = [f"What can you tell me about {entity}?", f"How does {entity} fit into the broader picture?", f"What's your perspective on {entity}?"]
+                questions = [f"What can you tell me about {entity}?",
+                             f"How does {entity} fit into the broader picture?",
+                             f"What's your perspective on {entity}?"]
 
         return random.choice(questions)
 

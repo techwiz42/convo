@@ -37,10 +37,6 @@ T5Tokenizer requires the SentencePiece library but it was not found in your envi
 installation page of its repo: https://github.com/google/sentencepiece#installation and follow the ones
 that match your environment. Please note that you may need to restart your runtime after installation.
 
-## To train a dataset 
-```
-python qa_cli.py --train --data path/to/your/data.json --model ./qa_model
-```
 ## To start an interactive Q&A session
 ```
 python qa_cli.py --model ./qa_model
@@ -94,3 +90,16 @@ The interactive session behaves as expected.
 - **qa_cli_v5.py** performs sentiment analysis on questions, selects question with the greatest absolute value 
 - **qa_cli_v6.py** tries to filter out nonsense questions
 - **qa_cli_v7.py** retries downloads
+
+## Creating Q&A datasets and training a model for conversationality
+Q&A data was downloaded from [COQA|https://stanfordnlp.github.io/coqa/] and processed into the following format:
+```
+[{"context": <some block of text here>,
+ "questions": [question_1, question_2, ... question_n]},
+ {"context":...}]
+```
+The script **fine_tune_t5.py** takes JSON files in this format and tunes the T5 model for conversationality. 
+Invoke like so:
+```
+python fine_tune_t5.py --train_data path/to/train.json --val_data path/to/val.json --model_name t5-base --num_epochs 3 --batch_size 8 --learning_rate 5e-5 --output_dir ./fine_tuned_qa_model
+```

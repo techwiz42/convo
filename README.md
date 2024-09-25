@@ -92,7 +92,7 @@ The interactive session behaves as expected.
 - **qa_cli_v7.py** retries downloads
 
 ## Creating Q&A datasets and training a model for conversationality
-Q&A data was downloaded from [COQA|https://stanfordnlp.github.io/coqa/] and processed into the following format:
+Q&A data was downloaded from [COQA](https://stanfordnlp.github.io/coqa/) and processed into the following format:
 ```
 [{"context": <some block of text here>,
  "questions": [question_1, question_2, ... question_n]},

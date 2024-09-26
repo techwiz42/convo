@@ -52,7 +52,7 @@ class QuestionAnswerCLI:
             temperature=0.7
         )
         
-        topics = [self.tokenizer.decode(output, skip_special_tokens=True) for output in topic_outputs]
+        topics = [self.tokenizer.decode(output, skip_special_tokens=True) for output in (topic_outputs if isinstance(topic_outputs, list) else [topic_outputs])]
         print("Generated topics:", topics)
         
         # Step 2: Generate questions based on topics
@@ -71,7 +71,7 @@ class QuestionAnswerCLI:
                 temperature=0.9
             )
             
-            questions = [self.tokenizer.decode(output, skip_special_tokens=True) for output in question_outputs]
+            questions = [self.tokenizer.decode(output, skip_special_tokens=True) for output in (question_outputs if isinstance(question_outputs, list) else [question_outputs])]
             print(f"Generated questions for topic '{topic}':", questions)
             
             filtered_questions = self.filter_questions(questions)
@@ -170,7 +170,7 @@ class QuestionAnswerCLI:
             temperature=0.7
         )
 
-        answers = [self.tokenizer.decode(output, skip_special_tokens=True) for output in outputs]
+        answers = [self.tokenizer.decode(output, skip_special_tokens=True) for output in (outputs if isinstance(outputs, list) else [outputs])]
         sentiments = [abs(self.analyze_sentiment(answer)) for answer in answers]
         
         return answers[sentiments.index(max(sentiments))]
@@ -201,6 +201,7 @@ class QuestionAnswerCLI:
             print(f"Detected sentiment: {sentiment:.2f}")
 
             ai_answer = self.generate_answers(question, context + " " + user_input)
+            print(f"AI: {ai_answer}")
 
             # Filter out 'AI' and 'Answer' from the context
             filtered_context = re.sub(r'\b(AI|Answer|Response|Question):', '', context)

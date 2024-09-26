@@ -35,15 +35,16 @@ class QuestionAnswerCLI:
     @lru_cache(maxsize=1000)
     def tokenize(self, text: str):
         return self.tokenizer(text, return_tensors="pt", max_length=512, truncation=True).input_ids.to(self.device)
-
-    def generate_question(self, context: str, sentiment: float) -> str:
-        # Step 1: Generate potential topics
-        topic_input = f"Extract key topics from: {context}"
-        topic_ids = self.tokenize(topic_input)
-        
+    
+    def generate_questions(self, context, sentiment):
+        if not context:
+            raise ValueError("Please provide a context")
+        input_text = f"generate questions: {context}"
+        input_ids = self.tokenizer.encode(input_text, return_tensors="pt")
+    
         topic_outputs = self.model.generate(
-            topic_ids,
-            max_length=64,
+            input_ids,
+            max_length=128,
             num_return_sequences=5,
             no_repeat_ngram_size=2,
             do_sample=True,
@@ -51,37 +52,16 @@ class QuestionAnswerCLI:
             top_p=0.95,
             temperature=0.7
         )
-        
-        topics = [self.tokenizer.decode(output, skip_special_tokens=True) for output in (topic_outputs if isinstance(topic_outputs, list) else [topic_outputs])]
-        print("Generated topics:", topics)
-        
-        # Step 2: Generate questions based on topics
-        for topic in topics:
-            question_input = f"Generate a question about {topic}. The question must end with a question mark."
-            question_ids = self.tokenize(question_input)
-            
-            question_outputs = self.model.generate(
-                question_ids,
-                max_length=64,
-                num_return_sequences=10,
-                no_repeat_ngram_size=2,
-                do_sample=True,
-                top_k=50,
-                top_p=0.95,
-                temperature=0.9
-            )
-            
-            questions = [self.tokenizer.decode(output, skip_special_tokens=True) for output in (question_outputs if isinstance(question_outputs, list) else [question_outputs])]
-            print(f"Generated questions for topic '{topic}':", questions)
-            
-            filtered_questions = self.filter_questions(questions)
-            if filtered_questions:
-                selected_question = self.select_non_repetitive_question(filtered_questions, sentiment)
-                if selected_question:
-                    return selected_question
-
-        print("Failed to generate a valid question. Falling back to default questions.")
-        return self.generate_fallback_question(context, sentiment)
+    
+        topics = []
+        for output in topic_outputs:
+            if isinstance(output, list):
+                # If output is a list of lists, flatten it
+                output = [item for sublist in output for item in sublist]
+            topics.append(self.tokenizer.decode(output, skip_special_tokens=True))
+    
+        questions = [f"{topic}?" for topic in topics]
+        return questions
 
     def filter_questions(self, questions):
         return [q for q in questions if self.is_valid_question(q)]
@@ -155,25 +135,44 @@ class QuestionAnswerCLI:
         self.sentiment_cache[text] = sentiment
         return sentiment
 
-    def generate_answers(self, question: str, context: str) -> str:
-        input_text = f"answer question: {question} context: {context}"
-        input_ids = self.tokenize(input_text)
-
+    def generate_answers(self, question, context):
+        # Truncate the context if it's too long
+        max_context_length = 384  # Adjust this value as needed
+        input_text = f"question: {question} context: {context[:max_context_length]}"
+        input_ids = self.tokenizer.encode(input_text, return_tensors="pt", max_length=512, truncation=True)
+    
+        # Generate more candidates than we need
+        num_return_sequences = 10
         outputs = self.model.generate(
             input_ids,
             max_length=128,
-            num_return_sequences=5,
+            num_return_sequences=num_return_sequences,
+            num_beams=num_return_sequences,
             no_repeat_ngram_size=2,
-            do_sample=True,
+            diversity_penalty=0.8,
+            num_beam_groups=5,
             top_k=50,
-            top_p=0.95,
-            temperature=0.7
+            do_sample=False
         )
-
-        answers = [self.tokenizer.decode(output, skip_special_tokens=True) for output in (outputs if isinstance(outputs, list) else [outputs])]
-        sentiments = [abs(self.analyze_sentiment(answer)) for answer in answers]
-        
-        return answers[sentiments.index(max(sentiments))]
+    
+        # Decode outputs
+        candidates = [self.tokenizer.decode(output, skip_special_tokens=True) for output in outputs]
+    
+        # Post-process to ensure uniqueness
+        unique_answers = []
+        for answer in candidates:
+            # Remove the question from the answer if it's repeated
+            answer = answer.replace(question, "").strip()
+            # Only add if it's not already in unique_answers
+            if answer not in unique_answers:
+                unique_answers.append(answer)
+    
+        # If we still don't have enough unique answers, generate some variations
+        while len(unique_answers) < 5:
+            variation = f"{unique_answers[0]} (Alternative {len(unique_answers) + 1})"
+            unique_answers.append(variation)
+    
+        return unique_answers[:5]  # Return only the first 5 unique answers    
 
     def interactive_session(self) -> None:
         self.user_name = input("Please enter your name: ")
@@ -190,7 +189,7 @@ class QuestionAnswerCLI:
         sentiment = 0  # Start with neutral sentiment
 
         while True:
-            question = self.generate_question(context, sentiment)
+            question = self.generate_questions(context, sentiment)
             print(f"AI: {question}")
 
             user_input = input(f"{self.user_name}: ")

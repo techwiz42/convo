@@ -17,6 +17,7 @@ import os
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Dict, List
+import numpy as np
 
 # Download necessary NLTK data
 nltk.download('punkt', quiet=True)
@@ -29,8 +30,15 @@ class UserKnowledgeBase:
     def __init__(self, user_id):
         self.user_id = user_id
         self.knowledge = {}
-        self.tfidf_vectorizer = TfidfVectorizer(stop_words='english')
+        self.tfidf_vectorizer = TfidfVectorizer(stop_words=None)  # Allow stop words
         self.tfidf_matrix = None
+        self._ensure_fitted()
+
+    def _ensure_fitted(self):
+        if not self.knowledge:
+            # If there's no knowledge, fit with a dummy string that includes non-stop words
+            self.tfidf_vectorizer.fit(["dummy content for initialization"])
+            self.tfidf_matrix = self.tfidf_vectorizer.transform(["dummy content for initialization"])
 
     def add_knowledge(self, topic, content):
         self.knowledge[topic] = content
@@ -38,11 +46,35 @@ class UserKnowledgeBase:
 
     def _update_tfidf(self):
         documents = list(self.knowledge.values())
-        self.tfidf_matrix = self.tfidf_vectorizer.fit_transform(documents)
+        if documents:
+            try:
+                self.tfidf_matrix = self.tfidf_vectorizer.fit_transform(documents)
+            except ValueError:
+                # If fit_transform fails (e.g., only stop words), use a simple bag of words approach
+                print("Warning: TfidfVectorizer fit failed. Using simple term frequency instead.")
+                self.tfidf_matrix = np.array([[doc.count(word) for word in set(" ".join(documents).split())] for doc in documents])
+        else:
+            self._ensure_fitted()
 
     def get_relevant_knowledge(self, query, top_n=3):
-        query_vec = self.tfidf_vectorizer.transform([query])
-        cosine_similarities = cosine_similarity(query_vec, self.tfidf_matrix).flatten()
+        if not self.knowledge:
+            return []  # Return empty list if there's no knowledge
+
+        try:
+            query_vec = self.tfidf_vectorizer.transform([query])
+        except ValueError:
+            # If transform fails, use the same simple approach as in _update_tfidf
+            print("Warning: TfidfVectorizer transform failed. Using simple term frequency instead.")
+            query_vec = np.array([[query.count(word) for word in set(" ".join(self.knowledge.values()).split())]])
+
+        if isinstance(self.tfidf_matrix, np.ndarray):
+            cosine_similarities = cosine_similarity(query_vec, self.tfidf_matrix).flatten()
+        else:
+            cosine_similarities = cosine_similarity(query_vec, self.tfidf_matrix).flatten()
+        
+        if len(self.knowledge) < top_n:
+            top_n = len(self.knowledge)
+
         related_docs_indices = cosine_similarities.argsort()[:-top_n-1:-1]
         return [list(self.knowledge.values())[i] for i in related_docs_indices]
 
@@ -51,12 +83,13 @@ class UserKnowledgeBase:
             json.dump(self.knowledge, f)
 
     def load(self):
-        if os.path.exists(f"{self.user_id}_knowledge.json"):
+        try:
             with open(f"{self.user_id}_knowledge.json", "r") as f:
                 self.knowledge = json.load(f)
             self._update_tfidf()
             return True
-        return False
+        except FileNotFoundError:
+            return False
 
 class Conversation:
     def __init__(self, user_id: str):
@@ -118,6 +151,11 @@ class EnhancedMultiUserQuestionAnswerCLI:
                     "knowledge_base": UserKnowledgeBase(user_id),
                     "conversation": Conversation(user_id)
                 }
+                # Add some initial knowledge with non-stop words
+                self.users[user_id]["knowledge_base"].add_knowledge(
+                    "initial", 
+                    "Welcome to our conversation system. This knowledge base stores important information from our interactions."
+                )
             return self.users[user_id]
 
     def generate_questions(self, context, sentiment):

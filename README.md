@@ -91,7 +91,7 @@ The interactive session behaves as expected.
 - **qa_cli_v6.py** tries to filter out nonsense questions
 - **qa_cli_v7.py** retries downloads
 - **qa_cli_v8.py** first attempt at fully conversational mode.
-
+- **combined_qa_cli.py** Concurrent multi-user, fine-tunes individual user models.
 ## Creating Q&A datasets and training a model for conversationality
 Q&A data was downloaded from [COQA](https://stanfordnlp.github.io/coqa/) and processed into the following format:
 ```

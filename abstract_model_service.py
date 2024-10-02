@@ -28,13 +28,22 @@ nltk.download('wordnet', quiet=True)
 nltk.download('vader_lexicon', quiet=True)
 nltk.download('stopwords', quiet=True)
 
+from transformers import utils
+
 # Set a longer timeout (e.g., 500 seconds)
+utils.TIMEOUT = 1200
+
+# If you want to disable the timeout entirely (use with caution)
+# utils.TIMEOUT = None
+
+# For requests library (used by Transformers internally)
+import requests
 requests.adapters.DEFAULT_RETRIES = 5
 requests.DEFAULT_RETRIES = 5
-requests.DEFAULT_TIMEOUT = 1200
-# Apply these settings to the Hugging Face Transformers library
-from transformers.utils import _default_httpclient
-_default_httpclient.DEFAULT_TIMEOUT = 1200  # or None to disable
+
+# Optional: Set socket timeout
+import socket
+socket.setdefaulttimeout(1200)  # 500 seconds
 
 
 class AbstractLanguageModel(ABC):

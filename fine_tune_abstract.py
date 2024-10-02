@@ -1,99 +1,160 @@
-import argparse
-import json
 import torch
+from transformers import T5ForConditionalGeneration, T5Tokenizer, get_linear_schedule_with_warmup
+from torch.optim import AdamW
 from torch.utils.data import Dataset, DataLoader
-from model_implementations import T5LanguageModel, BERTLanguageModel, GPT2LanguageModel, RoBERTaLanguageModel
-from typing import List, Dict
-import random
-from tqdm import tqdm, trange
+from tqdm import tqdm
+import json
+import argparse
+import os
 
-class ContextQuestionsDataset(Dataset):
-    def __init__(self, data: List[Dict[str, any]], model_type: str):
+class QuestionGenerationDataset(Dataset):
+    def __init__(self, data, tokenizer, max_length=512):
         self.examples = []
-        self.model_type = model_type
+        self.tokenizer = tokenizer
+        self.max_length = max_length
+
         for item in data:
             context = item['context']
             for question in item['questions']:
-                self.examples.append((context, question))
+                self.examples.append({
+                    'context': context,
+                    'question': question
+                })
 
     def __len__(self):
         return len(self.examples)
 
     def __getitem__(self, idx):
-        context, question = self.examples[idx]
-        if self.model_type in ['bert', 'roberta']:
-            return f"{question} [SEP] {context}", question
-        elif self.model_type == 't5':
-            return f"question: {question} context: {context}", question
-        elif self.model_type == 'gpt2':
-            return f"Context: {context}\nQuestion: {question}\nAnswer:", question
-        else:
-            raise ValueError(f"Unsupported model type: {self.model_type}")
+        item = self.examples[idx]
+        input_text = f"generate question: {item['context']}"
+        target_text = item['question']
 
-def load_data(file_path: str) -> List[Dict[str, any]]:
-    with open(file_path, 'r') as f:
-        return json.load(f)
+        input_encoding = self.tokenizer(input_text, max_length=self.max_length, padding='max_length', truncation=True, return_tensors='pt')
+        target_encoding = self.tokenizer(target_text, max_length=self.max_length, padding='max_length', truncation=True, return_tensors='pt')
 
-def fine_tune_model(model, train_dataloader: DataLoader, num_epochs: int):
-    epoch_iterator = trange(num_epochs, desc="Epoch")
-    for epoch in epoch_iterator:
-        batch_iterator = tqdm(train_dataloader, desc=f"Epoch {epoch+1}")
-        for input_text, target_text in batch_iterator:
-            # Ensure input_text and target_text are strings, not tensors
-            input_text = input_text[0]  # Assuming batch_size=1
-            target_text = target_text[0]  # Assuming batch_size=1
-            
-            try:
-                # Call the existing fine_tune method
-                model.fine_tune(input_text, target_text)
-                
-                # Update the progress bar
-                batch_iterator.set_postfix({"Status": "Processed"})
-            except Exception as e:
-                print(f"Error during fine-tuning: {str(e)}")
-                print(f"Input text: {input_text}")
-                print(f"Target text: {target_text}")
-                continue
+        return {
+            'input_ids': input_encoding['input_ids'].squeeze(),
+            'attention_mask': input_encoding['attention_mask'].squeeze(),
+            'labels': target_encoding['input_ids'].squeeze()
+        }
+
+def load_json_data(file_path):
+    with open(file_path, 'r', encoding='utf-8') as f:
+        data = json.load(f)
+    return data
+
+def train(model, train_dataloader, val_dataloader, device, num_epochs, learning_rate, gradient_accumulation_steps):
+    optimizer = AdamW(model.parameters(), lr=learning_rate)
+    total_steps = len(train_dataloader) * num_epochs // gradient_accumulation_steps
+    scheduler = get_linear_schedule_with_warmup(optimizer, num_warmup_steps=0, num_training_steps=total_steps)
+    
+    for epoch in range(num_epochs):
+        model.train()
+        total_loss = 0
         
-        epoch_iterator.set_postfix({"Status": "Completed"})
+        progress_bar = tqdm(total=len(train_dataloader), desc=f"Epoch {epoch+1}/{num_epochs}", unit="batch")
+        
+        for step, batch in enumerate(train_dataloader):
+            input_ids = batch['input_ids'].to(device)
+            attention_mask = batch['attention_mask'].to(device)
+            labels = batch['labels'].to(device)
+            
+            outputs = model(input_ids=input_ids, attention_mask=attention_mask, labels=labels)
+            loss = outputs.loss / gradient_accumulation_steps
+            loss.backward()
+            
+            total_loss += loss.item() * gradient_accumulation_steps
+            
+            if (step + 1) % gradient_accumulation_steps == 0:
+                torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+                optimizer.step()
+                scheduler.step()
+                optimizer.zero_grad()
+            
+            progress_bar.update(1)
+            progress_bar.set_postfix({'loss': f"{total_loss / (step + 1):.4f}"})
+            
+            del input_ids, attention_mask, labels, outputs
+            torch.cuda.empty_cache()
+        
+        progress_bar.close()
+        
+        avg_train_loss = total_loss / len(train_dataloader)
+        print(f"Epoch {epoch+1}/{num_epochs} completed. Average training loss: {avg_train_loss:.4f}")
+        
+        # Validation
+        model.eval()
+        total_val_loss = 0
+        
+        val_progress_bar = tqdm(total=len(val_dataloader), desc="Validation", unit="batch")
+        
+        with torch.no_grad():
+            for step, batch in enumerate(val_dataloader):
+                input_ids = batch['input_ids'].to(device)
+                attention_mask = batch['attention_mask'].to(device)
+                labels = batch['labels'].to(device)
+                
+                outputs = model(input_ids=input_ids, attention_mask=attention_mask, labels=labels)
+                loss = outputs.loss
+                
+                total_val_loss += loss.item()
+                
+                val_progress_bar.update(1)
+                val_progress_bar.set_postfix({'loss': f"{total_val_loss / (step + 1):.4f}"})
+                
+                del input_ids, attention_mask, labels, outputs
+                torch.cuda.empty_cache()
+        
+        val_progress_bar.close()
+        
+        avg_val_loss = total_val_loss / len(val_dataloader)
+        print(f"Validation completed. Average validation loss: {avg_val_loss:.4f}")
+    
+    return model
 
 def main():
-    parser = argparse.ArgumentParser(description="Fine-tune an abstract language model")
-    parser.add_argument("--model_type", type=str, required=True, choices=['t5', 'bert', 'gpt2', 'roberta'], help="Type of model to fine-tune")
-    parser.add_argument("--data_path", type=str, required=True, help="Path to the training data JSON file")
-    parser.add_argument("--output_dir", type=str, required=True, help="Directory to save the fine-tuned model")
+    parser = argparse.ArgumentParser(description="Fine-tune T5 model for question generation")
+    parser.add_argument("--model_name", type=str, default="t5-base", help="Name of the pre-trained model to use")
+    parser.add_argument("--train_data", type=str, required=True, help="Path to the training data JSON file")
+    parser.add_argument("--val_data", type=str, required=True, help="Path to the validation data JSON file")
     parser.add_argument("--num_epochs", type=int, default=3, help="Number of training epochs")
-    parser.add_argument("--batch_size", type=int, default=1, help="Training batch size")
+    parser.add_argument("--batch_size", type=int, default=4, help="Batch size for training")
+    parser.add_argument("--learning_rate", type=float, default=5e-5, help="Learning rate for optimizer")
+    parser.add_argument("--output_dir", type=str, default="./fine_tuned_model", help="Directory to save the fine-tuned model")
+    parser.add_argument("--gradient_accumulation_steps", type=int, default=2, help="Number of updates steps to accumulate before performing a backward/update pass")
     args = parser.parse_args()
 
-    # Load data
-    print("Loading data...")
-    data = load_data(args.data_path)
-    dataset = ContextQuestionsDataset(data, args.model_type)
-    dataloader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True)
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print(f"Using device: {device}")
 
-    # Initialize model
-    print(f"Initializing {args.model_type} model...")
-    model_map = {
-        't5': T5LanguageModel,
-        'bert': BERTLanguageModel,
-        'gpt2': GPT2LanguageModel,
-        'roberta': RoBERTaLanguageModel
-    }
-    model_class = model_map.get(args.model_type)
-    if model_class is None:
-        raise ValueError(f"Unsupported model type: {args.model_type}")
-    
-    model = model_class("fine_tuning")  # Use a generic user_id for fine-tuning
+    print("Loading tokenizer and model...")
+    if os.path.exists(args.output_dir):
+        print(f"Loading previously fine-tuned model from {args.output_dir}")
+        model = T5ForConditionalGeneration.from_pretrained(args.output_dir)
+        tokenizer = T5Tokenizer.from_pretrained(args.output_dir)
+    else:
+        print(f"Loading base model {args.model_name}")
+        model = T5ForConditionalGeneration.from_pretrained(args.model_name)
+        tokenizer = T5Tokenizer.from_pretrained(args.model_name)
 
-    # Fine-tune the model
+    model = model.to(device)
+
+    print("Preparing datasets...")
+    train_data = load_json_data(args.train_data)
+    val_data = load_json_data(args.val_data)
+
+    train_dataset = QuestionGenerationDataset(train_data, tokenizer)
+    val_dataset = QuestionGenerationDataset(val_data, tokenizer)
+
+    train_dataloader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True)
+    val_dataloader = DataLoader(val_dataset, batch_size=args.batch_size)
+
     print("Starting fine-tuning...")
-    fine_tune_model(model, dataloader, args.num_epochs)
+    fine_tuned_model = train(model, train_dataloader, val_dataloader, device, args.num_epochs, args.learning_rate, args.gradient_accumulation_steps)
 
-    # Save the fine-tuned model
     print(f"Saving fine-tuned model to {args.output_dir}")
-    model.save(args.output_dir)
-    print("Fine-tuning completed!")
+    fine_tuned_model.save_pretrained(args.output_dir)
+    tokenizer.save_pretrained(args.output_dir)
 
 if __name__ == "__main__":
     main()

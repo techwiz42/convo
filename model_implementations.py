@@ -41,18 +41,24 @@ class AbstractLanguageModel(ABC):
 class T5LanguageModel(AbstractLanguageModel):
     def __init__(self, user_id: str):
         self.user_id = user_id
+        self.model_path = f".model_t5/{user_id}_model"
+
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.model = T5ForConditionalGeneration.from_pretrained("t5-small").to(self.device)
 
         # Set timeout for downloads
-        utils.TIMEOUT = 500
+        utils.TIMEOUT = 1200
         requests.adapters.DEFAULT_RETRIES = 5
         requests.DEFAULT_RETRIES = 5
-        socket.setdefaulttimeout(500)
+        socket.setdefaulttimeout(1200)
 
         # Initialize model and tokenizer
-        self.model = T5ForConditionalGeneration.from_pretrained("t5-small", local_files_only=False).to(self.device)
-        self.tokenizer = T5Tokenizer.from_pretrained("t5-small", local_files_only=False)
+        if os.path.exists(self.model_path):
+            self.model = T5ForConditionalGeneration.from_pretrained(self.model_path)
+            self.tokenizer = T5Tokenizer.from_pretrained(self.model_path)
+        else:
+            self.model = T5ForConditionalGeneration.from_pretrained("t5-small", local_files_only=False).to(self.device)
+            self.tokenizer = T5Tokenizer.from_pretrained("t5-small", local_files_only=False)
 
 
     def generate_response(self, input_text: str) -> str:
@@ -76,13 +82,13 @@ class T5LanguageModel(AbstractLanguageModel):
 
 
     def save(self, path: str):
-        self.model.save_pretrained(f"{path}_t5")
-        self.tokenizer.save_pretrained(f"{path}_t5")
+        self.model.save_pretrained(self.model_path)
+        self.tokenizer.save_pretrained(self.model_path)
 
     def load(self, path: str) -> bool:
-        if os.path.exists(f"{path}_t5"):
-            self.model = T5ForConditionalGeneration.from_pretrained(f"{path}_t5").to(self.device)
-            self.tokenizer = T5Tokenizer.from_pretrained(f"{path}_t5")
+        if os.path.exists(self.model_path):
+            self.model = T5ForConditionalGeneration.from_pretrained(self.model_path).to(self.device)
+            self.tokenizer = T5Tokenizer.from_pretrained(self.model_path)
             return True
         return False
 

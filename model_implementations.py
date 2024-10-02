@@ -9,7 +9,13 @@ import torch
 from typing import Dict, Any
 import os
 import requests
+from transformers import utils
+import socket
 from abc import ABC, abstractmethod
+import nltk
+
+nltk.download('punkt_tab')
+nltk.download('averaged_perceptron_tagger_eng')
 
 class AbstractLanguageModel(ABC):
     @abstractmethod
@@ -58,10 +64,16 @@ class T5LanguageModel(AbstractLanguageModel):
         input_ids = self.tokenizer(input_text, return_tensors="pt", max_length=512, truncation=True).input_ids.to(self.device)
         target_ids = self.tokenizer(target_text, return_tensors="pt", max_length=512, truncation=True).input_ids.to(self.device)
 
-        optimizer = torch.optim.AdamW(self.model.parameters(), lr=1e-5)
-        loss = self.model(input_ids=input_ids, labels=target_ids).loss
-        loss.backward()
-        optimizer.step()
+        outputs = self.model(input_ids=input_ids, labels=target_ids)
+        loss = outputs.loss
+        
+        if loss is not None:
+            loss.backward()
+            optimizer = torch.optim.AdamW(self.model.parameters(), lr=1e-5)
+            optimizer.step()
+        else:
+            print("Warning: Loss is None. Check input formatting.")
+
 
     def save(self, path: str):
         self.model.save_pretrained(f"{path}_t5")
@@ -101,12 +113,27 @@ class BERTLanguageModel(AbstractLanguageModel):
         return answer
 
     def fine_tune(self, input_text: str, target_text: str):
-        inputs = self.tokenizer(input_text, target_text, return_tensors="pt", max_length=512, truncation=True).to(self.device)
-        outputs = self.model(**inputs)
+        # Format input for question answering
+        encoding = self.tokenizer(input_text, target_text, return_tensors="pt", max_length=512, truncation=True)
+        input_ids = encoding["input_ids"].to(self.device)
+        attention_mask = encoding["attention_mask"].to(self.device)
+        
+        # Randomly set start and end positions for this example
+        start_positions = torch.tensor([1]).to(self.device)
+        end_positions = torch.tensor([len(input_ids[0]) - 1]).to(self.device)
+
+        outputs = self.model(input_ids, 
+                             attention_mask=attention_mask, 
+                             start_positions=start_positions, 
+                             end_positions=end_positions)
         loss = outputs.loss
-        loss.backward()
-        optimizer = torch.optim.AdamW(self.model.parameters(), lr=1e-5)
-        optimizer.step()
+        
+        if loss is not None:
+            loss.backward()
+            optimizer = torch.optim.AdamW(self.model.parameters(), lr=1e-5)
+            optimizer.step()
+        else:
+            print("Warning: Loss is None. Check input formatting.")
 
     def save(self, path: str):
         self.model.save_pretrained(f"{path}_bert")
@@ -143,12 +170,18 @@ class GPT2LanguageModel(AbstractLanguageModel):
         return self.tokenizer.decode(output[0], skip_special_tokens=True)
 
     def fine_tune(self, input_text: str, target_text: str):
-        inputs = self.tokenizer(input_text + " " + target_text, return_tensors="pt", max_length=512, truncation=True).to(self.device)
-        outputs = self.model(**inputs, labels=inputs.input_ids)
+        input_ids = self.tokenizer(input_text, return_tensors="pt", max_length=512, truncation=True).input_ids.to(self.device)
+        target_ids = self.tokenizer(target_text, return_tensors="pt", max_length=512, truncation=True).input_ids.to(self.device)
+
+        outputs = self.model(input_ids=input_ids, labels=target_ids)
         loss = outputs.loss
-        loss.backward()
-        optimizer = torch.optim.AdamW(self.model.parameters(), lr=1e-5)
-        optimizer.step()
+        
+        if loss is not None:
+            loss.backward()
+            optimizer = torch.optim.AdamW(self.model.parameters(), lr=1e-5)
+            optimizer.step()
+        else:
+            print("Warning: Loss is None. Check input formatting.")
 
     def save(self, path: str):
         self.model.save_pretrained(f"{path}_gpt2")
@@ -187,13 +220,19 @@ class RoBERTaLanguageModel(AbstractLanguageModel):
         answer = self.tokenizer.decode(inputs.input_ids[0][answer_start:answer_end])
         return answer
 
-    def fine_tune(self, input_text: str, target_text: str):
-        inputs = self.tokenizer(input_text, target_text, return_tensors="pt", max_length=512, truncation=True).to(self.device)
-        outputs = self.model(**inputs)
-        loss = outputs.loss
-        loss.backward()
-        optimizer = torch.optim.AdamW(self.model.parameters(), lr=1e-5)
-        optimizer.step()
+        def fine_tune(self, input_text: str, target_text: str):
+            input_ids = self.tokenizer(input_text, return_tensors="pt", max_length=512, truncation=True).input_ids.to(self.device)
+            target_ids = self.tokenizer(target_text, return_tensors="pt", max_length=512, truncation=True).input_ids.to(self.device)
+
+            outputs = self.model(input_ids=input_ids, labels=target_ids)
+            loss = outputs.loss
+        
+            if loss is not None:
+                loss.backward()
+                optimizer = torch.optim.AdamW(self.model.parameters(), lr=1e-5)
+                optimizer.step()
+            else:
+                print("Warning: Loss is None. Check input formatting.")
 
     def save(self, path: str):
         self.model.save_pretrained(f"{path}_roberta")

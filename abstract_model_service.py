@@ -18,6 +18,7 @@ import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Dict, List, Any
 import numpy as np
+import requests
 from abc import ABC, abstractmethod
 
 # Download necessary NLTK data
@@ -26,6 +27,15 @@ nltk.download('averaged_perceptron_tagger', quiet=True)
 nltk.download('wordnet', quiet=True)
 nltk.download('vader_lexicon', quiet=True)
 nltk.download('stopwords', quiet=True)
+
+# Set a longer timeout (e.g., 500 seconds)
+requests.adapters.DEFAULT_RETRIES = 5
+requests.DEFAULT_RETRIES = 5
+requests.DEFAULT_TIMEOUT = 1200
+# Apply these settings to the Hugging Face Transformers library
+from transformers.utils import _default_httpclient
+_default_httpclient.DEFAULT_TIMEOUT = 1200  # or None to disable
+
 
 class AbstractLanguageModel(ABC):
     """

@@ -8,6 +8,7 @@ from transformers import (
 import torch
 from typing import Dict, Any
 import os
+import requests
 from abc import ABC, abstractmethod
 
 class AbstractLanguageModel(ABC):
@@ -37,6 +38,14 @@ class T5LanguageModel(AbstractLanguageModel):
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.model = T5ForConditionalGeneration.from_pretrained("t5-small").to(self.device)
         self.tokenizer = T5Tokenizer.from_pretrained("t5-small")
+        requests.DEFAULT_TIMEOUT = 1200
+        from transformers.utils import _default_httpclient
+        _default_httpclient.DEFAULT_TIMEOUT = 1200
+
+        # Initialize model and tokenizer with longer timeout
+        self.model = T5ForConditionalGeneration.from_pretrained("t5-small", local_files_only=False).to(self.device)
+        self.tokenizer = T5Tokenizer.from_pretrained("t5-small", local_files_only=False)
+
 
     def generate_response(self, input_text: str) -> str:
         input_ids = self.tokenizer(input_text, return_tensors="pt", max_length=512, truncation=True).input_ids.to(self.device)
@@ -72,6 +81,9 @@ class BERTLanguageModel(AbstractLanguageModel):
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.model = BertForQuestionAnswering.from_pretrained("bert-base-uncased").to(self.device)
         self.tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
+        requests.DEFAULT_TIMEOUT = 1200
+        from transformers.utils import _default_httpclient
+        _default_httpclient.DEFAULT_TIMEOUT = 1200
 
     def generate_response(self, input_text: str) -> str:
         inputs = self.tokenizer(input_text, return_tensors="pt", max_length=512, truncation=True).to(self.device)
@@ -110,6 +122,9 @@ class GPT2LanguageModel(AbstractLanguageModel):
         self.model = GPT2LMHeadModel.from_pretrained("gpt2").to(self.device)
         self.tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
         self.tokenizer.pad_token = self.tokenizer.eos_token
+        requests.DEFAULT_TIMEOUT = 1200
+        from transformers.utils import _default_httpclient
+        _default_httpclient.DEFAULT_TIMEOUT = 1200
 
     def generate_response(self, input_text: str) -> str:
         input_ids = self.tokenizer.encode(input_text, return_tensors="pt").to(self.device)
@@ -145,6 +160,9 @@ class RoBERTaLanguageModel(AbstractLanguageModel):
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.model = RobertaForQuestionAnswering.from_pretrained("roberta-base").to(self.device)
         self.tokenizer = RobertaTokenizer.from_pretrained("roberta-base")
+        requests.DEFAULT_TIMEOUT = 1200
+        from transformers.utils import _default_httpclient
+        _default_httpclient.DEFAULT_TIMEOUT = 1200
 
     def generate_response(self, input_text: str) -> str:
         inputs = self.tokenizer(input_text, return_tensors="pt", max_length=512, truncation=True).to(self.device)

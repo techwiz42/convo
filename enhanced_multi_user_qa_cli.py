@@ -10,7 +10,7 @@ from nltk.tag import pos_tag
 from nltk.sentiment import SentimentIntensityAnalyzer
 from functools import lru_cache
 from user_knowledge_base import UserKnowledgeBase
-from conversation import Conversation
+from abstract_language_model import Conversation
 from abstract_language_model import AbstractLanguageModel
 
 class EnhancedMultiUserQuestionAnswerCLI:

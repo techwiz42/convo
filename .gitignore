@@ -3,6 +3,7 @@ __pycache__/
 .DS_Store
 qa_model/
 .model_t5/
+.models/
 model_t5
 *_conversation.json
 *_knowledge.json

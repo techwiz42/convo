@@ -14,8 +14,8 @@ import socket
 from abc import ABC, abstractmethod
 import nltk
 
-nltk.download('punkt_tab')
-nltk.download('averaged_perceptron_tagger_eng')
+nltk.download('punkt', quiet=True)
+nltk.download('averaged_perceptron_tagger', quiet=True)
 
 class AbstractLanguageModel(ABC):
     @abstractmethod
@@ -39,12 +39,12 @@ class AbstractLanguageModel(ABC):
         pass
 
 class T5LanguageModel(AbstractLanguageModel):
-    def __init__(self, user_id: str):
+    def __init__(self, user_id: str, model_path: str):
         self.user_id = user_id
-        self.model_path = f".model_t5/{user_id}_model"
+        self.model_path = model_path
+        self.user_model_path = f".models/{user_id}_t5"
 
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.model = T5ForConditionalGeneration.from_pretrained("t5-small").to(self.device)
 
         # Set timeout for downloads
         utils.TIMEOUT = 1200
@@ -53,13 +53,15 @@ class T5LanguageModel(AbstractLanguageModel):
         socket.setdefaulttimeout(1200)
 
         # Initialize model and tokenizer
-        if os.path.exists(self.model_path):
-            self.model = T5ForConditionalGeneration.from_pretrained(self.model_path)
+        if os.path.exists(self.user_model_path):
+            self.model = T5ForConditionalGeneration.from_pretrained(self.user_model_path).to(self.device)
+            self.tokenizer = T5Tokenizer.from_pretrained(self.user_model_path)
+        elif os.path.exists(self.model_path):
+            self.model = T5ForConditionalGeneration.from_pretrained(self.model_path).to(self.device)
             self.tokenizer = T5Tokenizer.from_pretrained(self.model_path)
         else:
-            self.model = T5ForConditionalGeneration.from_pretrained("t5-small", local_files_only=False).to(self.device)
-            self.tokenizer = T5Tokenizer.from_pretrained("t5-small", local_files_only=False)
-
+            self.model = T5ForConditionalGeneration.from_pretrained("t5-small").to(self.device)
+            self.tokenizer = T5Tokenizer.from_pretrained("t5-small")
 
     def generate_response(self, input_text: str) -> str:
         input_ids = self.tokenizer(input_text, return_tensors="pt", max_length=512, truncation=True).input_ids.to(self.device)
@@ -80,15 +82,14 @@ class T5LanguageModel(AbstractLanguageModel):
         else:
             print("Warning: Loss is None. Check input formatting.")
 
-
     def save(self, path: str):
-        self.model.save_pretrained(self.model_path)
-        self.tokenizer.save_pretrained(self.model_path)
+        self.model.save_pretrained(self.user_model_path)
+        self.tokenizer.save_pretrained(self.user_model_path)
 
     def load(self, path: str) -> bool:
-        if os.path.exists(self.model_path):
-            self.model = T5ForConditionalGeneration.from_pretrained(self.model_path).to(self.device)
-            self.tokenizer = T5Tokenizer.from_pretrained(self.model_path)
+        if os.path.exists(self.user_model_path):
+            self.model = T5ForConditionalGeneration.from_pretrained(self.user_model_path).to(self.device)
+            self.tokenizer = T5Tokenizer.from_pretrained(self.user_model_path)
             return True
         return False
 
@@ -96,19 +97,29 @@ class T5LanguageModel(AbstractLanguageModel):
         return self.tokenizer
 
 class BERTLanguageModel(AbstractLanguageModel):
-    def __init__(self, user_id: str):
+    def __init__(self, user_id: str, model_path: str):
         self.user_id = user_id
+        self.model_path = model_path
+        self.user_model_path = f".models/{user_id}_bert"
+
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.model = BertForQuestionAnswering.from_pretrained("bert-base-uncased").to(self.device)
-       # Set timeout for downloads
+
+        # Set timeout for downloads
         utils.TIMEOUT = 1200
         requests.adapters.DEFAULT_RETRIES = 5
         requests.DEFAULT_RETRIES = 5
         socket.setdefaulttimeout(1200)
 
         # Initialize model and tokenizer
-        self.model = BertForQuestionAnswering.from_pretrained("bert-base-uncased").to(self.device)
-        self.tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
+        if os.path.exists(self.user_model_path):
+            self.model = BertForQuestionAnswering.from_pretrained(self.user_model_path).to(self.device)
+            self.tokenizer = BertTokenizer.from_pretrained(self.user_model_path)
+        elif os.path.exists(self.model_path):
+            self.model = BertForQuestionAnswering.from_pretrained(self.model_path).to(self.device)
+            self.tokenizer = BertTokenizer.from_pretrained(self.model_path)
+        else:
+            self.model = BertForQuestionAnswering.from_pretrained("bert-base-uncased").to(self.device)
+            self.tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
 
     def generate_response(self, input_text: str) -> str:
         inputs = self.tokenizer(input_text, return_tensors="pt", max_length=512, truncation=True).to(self.device)
@@ -119,12 +130,10 @@ class BERTLanguageModel(AbstractLanguageModel):
         return answer
 
     def fine_tune(self, input_text: str, target_text: str):
-        # Format input for question answering
         encoding = self.tokenizer(input_text, target_text, return_tensors="pt", max_length=512, truncation=True)
         input_ids = encoding["input_ids"].to(self.device)
         attention_mask = encoding["attention_mask"].to(self.device)
         
-        # Randomly set start and end positions for this example
         start_positions = torch.tensor([1]).to(self.device)
         end_positions = torch.tensor([len(input_ids[0]) - 1]).to(self.device)
 
@@ -142,13 +151,13 @@ class BERTLanguageModel(AbstractLanguageModel):
             print("Warning: Loss is None. Check input formatting.")
 
     def save(self, path: str):
-        self.model.save_pretrained(f"{path}_bert")
-        self.tokenizer.save_pretrained(f"{path}_bert")
+        self.model.save_pretrained(self.user_model_path)
+        self.tokenizer.save_pretrained(self.user_model_path)
 
     def load(self, path: str) -> bool:
-        if os.path.exists(f"{path}_bert"):
-            self.model = BertForQuestionAnswering.from_pretrained(f"{path}_bert").to(self.device)
-            self.tokenizer = BertTokenizer.from_pretrained(f"{path}_bert")
+        if os.path.exists(self.user_model_path):
+            self.model = BertForQuestionAnswering.from_pretrained(self.user_model_path).to(self.device)
+            self.tokenizer = BertTokenizer.from_pretrained(self.user_model_path)
             return True
         return False
 
@@ -156,8 +165,11 @@ class BERTLanguageModel(AbstractLanguageModel):
         return self.tokenizer
 
 class GPT2LanguageModel(AbstractLanguageModel):
-    def __init__(self, user_id: str):
+    def __init__(self, user_id: str, model_path: str):
         self.user_id = user_id
+        self.model_path = model_path
+        self.user_model_path = f".models/{user_id}_gpt2"
+
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
         # Set timeout for downloads
@@ -166,8 +178,17 @@ class GPT2LanguageModel(AbstractLanguageModel):
         requests.DEFAULT_RETRIES = 5
         socket.setdefaulttimeout(1200)
 
-        self.model = GPT2LMHeadModel.from_pretrained("gpt2").to(self.device)
-        self.tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
+        # Initialize model and tokenizer
+        if os.path.exists(self.user_model_path):
+            self.model = GPT2LMHeadModel.from_pretrained(self.user_model_path).to(self.device)
+            self.tokenizer = GPT2Tokenizer.from_pretrained(self.user_model_path)
+        elif os.path.exists(self.model_path):
+            self.model = GPT2LMHeadModel.from_pretrained(self.model_path).to(self.device)
+            self.tokenizer = GPT2Tokenizer.from_pretrained(self.model_path)
+        else:
+            self.model = GPT2LMHeadModel.from_pretrained("gpt2").to(self.device)
+            self.tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
+
         self.tokenizer.pad_token = self.tokenizer.eos_token
 
     def generate_response(self, input_text: str) -> str:
@@ -190,13 +211,13 @@ class GPT2LanguageModel(AbstractLanguageModel):
             print("Warning: Loss is None. Check input formatting.")
 
     def save(self, path: str):
-        self.model.save_pretrained(f"{path}_gpt2")
-        self.tokenizer.save_pretrained(f"{path}_gpt2")
+        self.model.save_pretrained(self.user_model_path)
+        self.tokenizer.save_pretrained(self.user_model_path)
 
     def load(self, path: str) -> bool:
-        if os.path.exists(f"{path}_gpt2"):
-            self.model = GPT2LMHeadModel.from_pretrained(f"{path}_gpt2").to(self.device)
-            self.tokenizer = GPT2Tokenizer.from_pretrained(f"{path}_gpt2")
+        if os.path.exists(self.user_model_path):
+            self.model = GPT2LMHeadModel.from_pretrained(self.user_model_path).to(self.device)
+            self.tokenizer = GPT2Tokenizer.from_pretrained(self.user_model_path)
             self.tokenizer.pad_token = self.tokenizer.eos_token
             return True
         return False
@@ -205,18 +226,29 @@ class GPT2LanguageModel(AbstractLanguageModel):
         return self.tokenizer
 
 class RoBERTaLanguageModel(AbstractLanguageModel):
-    def __init__(self, user_id: str):
+    def __init__(self, user_id: str, model_path: str):
         self.user_id = user_id
+        self.model_path = model_path
+        self.user_model_path = f".models/{user_id}_roberta"
+
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         
         # Set timeout for downloads
-        utils.TIMEOUT = 500
+        utils.TIMEOUT = 1200
         requests.adapters.DEFAULT_RETRIES = 5
         requests.DEFAULT_RETRIES = 5
-        socket.setdefaulttimeout(500)
+        socket.setdefaulttimeout(1200)
 
-        self.model = RobertaForQuestionAnswering.from_pretrained("roberta-base").to(self.device)
-        self.tokenizer = RobertaTokenizer.from_pretrained("roberta-base")
+        # Initialize model and tokenizer
+        if os.path.exists(self.user_model_path):
+            self.model = RobertaForQuestionAnswering.from_pretrained(self.user_model_path).to(self.device)
+            self.tokenizer = RobertaTokenizer.from_pretrained(self.user_model_path)
+        elif os.path.exists(self.model_path):
+            self.model = RobertaForQuestionAnswering.from_pretrained(self.model_path).to(self.device)
+            self.tokenizer = RobertaTokenizer.from_pretrained(self.model_path)
+        else:
+            self.model = RobertaForQuestionAnswering.from_pretrained("roberta-base").to(self.device)
+            self.tokenizer = RobertaTokenizer.from_pretrained("roberta-base")
 
     def generate_response(self, input_text: str) -> str:
         inputs = self.tokenizer(input_text, return_tensors="pt", max_length=512, truncation=True).to(self.device)
@@ -226,28 +258,28 @@ class RoBERTaLanguageModel(AbstractLanguageModel):
         answer = self.tokenizer.decode(inputs.input_ids[0][answer_start:answer_end])
         return answer
 
-        def fine_tune(self, input_text: str, target_text: str):
-            input_ids = self.tokenizer(input_text, return_tensors="pt", max_length=512, truncation=True).input_ids.to(self.device)
-            target_ids = self.tokenizer(target_text, return_tensors="pt", max_length=512, truncation=True).input_ids.to(self.device)
+    def fine_tune(self, input_text: str, target_text: str):
+        input_ids = self.tokenizer(input_text, return_tensors="pt", max_length=512, truncation=True).input_ids.to(self.device)
+        target_ids = self.tokenizer(target_text, return_tensors="pt", max_length=512, truncation=True).input_ids.to(self.device)
 
-            outputs = self.model(input_ids=input_ids, labels=target_ids)
-            loss = outputs.loss
+        outputs = self.model(input_ids=input_ids, labels=target_ids)
+        loss = outputs.loss
         
-            if loss is not None:
-                loss.backward()
-                optimizer = torch.optim.AdamW(self.model.parameters(), lr=1e-5)
-                optimizer.step()
-            else:
-                print("Warning: Loss is None. Check input formatting.")
+        if loss is not None:
+            loss.backward()
+            optimizer = torch.optim.AdamW(self.model.parameters(), lr=1e-5)
+            optimizer.step()
+        else:
+            print("Warning: Loss is None. Check input formatting.")
 
     def save(self, path: str):
-        self.model.save_pretrained(f"{path}_roberta")
-        self.tokenizer.save_pretrained(f"{path}_roberta")
+        self.model.save_pretrained(self.user_model_path)
+        self.tokenizer.save_pretrained(self.user_model_path)
 
     def load(self, path: str) -> bool:
-        if os.path.exists(f"{path}_roberta"):
-            self.model = RobertaForQuestionAnswering.from_pretrained(f"{path}_roberta").to(self.device)
-            self.tokenizer = RobertaTokenizer.from_pretrained(f"{path}_roberta")
+        if os.path.exists(self.user_model_path):
+            self.model = RobertaForQuestionAnswering.from_pretrained(self.user_model_path).to(self.device)
+            self.tokenizer = RobertaTokenizer.from_pretrained(self.user_model_path)
             return True
         return False
 

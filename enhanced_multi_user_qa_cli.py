@@ -1,140 +1,17 @@
-import torch
-from torch.utils.data import Dataset, DataLoader
-from transformers import PreTrainedTokenizer
-import nltk
-from nltk.tokenize import sent_tokenize, word_tokenize
-from nltk.tag import pos_tag
-from nltk.corpus import wordnet, stopwords
-from nltk.sentiment import SentimentIntensityAnalyzer
-from functools import lru_cache
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.metrics.pairwise import cosine_similarity
-import re
+import threading
 import random
-import argparse
+import re
 import json
 import os
-import threading
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import Dict, List, Any
-import numpy as np
-import requests
-from model_implementations import T5LanguageModel, BERTLanguageModel, GPT2LanguageModel, RoBERTaLanguageModel
-from abc import ABC, abstractmethod
-import logging
-
-# Download necessary NLTK data
-nltk.download('punkt', quiet=True)
-nltk.download('averaged_perceptron_tagger', quiet=True)
-nltk.download('wordnet', quiet=True)
-nltk.download('vader_lexicon', quiet=True)
-nltk.download('stopwords', quiet=True)
-
-# Configure logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
-
-# Set a longer timeout
-from transformers import utils
-utils.TIMEOUT = 1200
-
-# For requests library
-requests.adapters.DEFAULT_RETRIES = 5
-requests.DEFAULT_RETRIES = 5
-
-# Set socket timeout
-import socket
-socket.setdefaulttimeout(1200)
-
-class AbstractLanguageModel(ABC):
-    @abstractmethod
-    def generate_response(self, input_text: str) -> str:
-        pass
-
-    @abstractmethod
-    def fine_tune(self, input_text: str, target_text: str):
-        pass
-
-    @abstractmethod
-    def save(self, path: str):
-        pass
-
-    @abstractmethod
-    def load(self, path: str) -> bool:
-        pass
-
-    @abstractmethod
-    def get_tokenizer(self) -> PreTrainedTokenizer:
-        pass
-
-class UserKnowledgeBase:
-    def __init__(self, user_id):
-        self.user_id = user_id
-        self.knowledge = {}
-        self.tfidf_vectorizer = TfidfVectorizer(stop_words='english')
-        self.tfidf_matrix = None
-        self._ensure_fitted()
-
-    def _ensure_fitted(self):
-        if not self.knowledge:
-            self.tfidf_vectorizer.fit(["dummy content for initialization"])
-            self.tfidf_matrix = self.tfidf_vectorizer.transform(["dummy content for initialization"])
-
-    def add_knowledge(self, topic: str, content: str):
-        self.knowledge[topic] = content
-        self._update_tfidf()
-
-    def _update_tfidf(self):
-        documents = list(self.knowledge.values())
-        if documents:
-            try:
-                self.tfidf_matrix = self.tfidf_vectorizer.fit_transform(documents)
-            except ValueError:
-                print("Warning: TfidfVectorizer fit failed. Using simple term frequency instead.")
-                self.tfidf_matrix = np.array([[doc.count(word) for word in set(" ".join(documents).split())] for doc in documents])
-        else:
-            self._ensure_fitted()
-
-    def get_relevant_knowledge(self, query: str, top_n: int = 3) -> List[str]:
-        if not self.knowledge:
-            return []
-
-        try:
-            query_vec = self.tfidf_vectorizer.transform([query])
-        except ValueError:
-            print("Warning: TfidfVectorizer transform failed. Using simple term frequency instead.")
-            query_vec = np.array([[query.count(word) for word in set(" ".join(self.knowledge.values()).split())]])
-
-        if isinstance(self.tfidf_matrix, np.ndarray):
-            cosine_similarities = cosine_similarity(query_vec, self.tfidf_matrix).flatten()
-        else:
-            cosine_similarities = cosine_similarity(query_vec, self.tfidf_matrix).flatten()
-        
-        if len(self.knowledge) < top_n:
-            top_n = len(self.knowledge)
-
-        related_docs_indices = cosine_similarities.argsort()[:-top_n-1:-1]
-        return [list(self.knowledge.values())[i] for i in related_docs_indices]
-
-    def save(self):
-        with open(f"{self.user_id}_knowledge.json", "w") as f:
-            json.dump(self.knowledge, f)
-
-    def load(self) -> bool:
-        try:
-            with open(f"{self.user_id}_knowledge.json", "r") as f:
-                self.knowledge = json.load(f)
-            self._update_tfidf()
-            return True
-        except FileNotFoundError:
-            return False
-
-class Conversation:
-    def __init__(self, user_id: str):
-        self.user_id = user_id
-        self.conversation_history = ""
-        self.previous_questions = set()
-        self.last_question = None
+from typing import Dict, List
+import nltk
+from nltk.tokenize import word_tokenize
+from nltk.tag import pos_tag
+from nltk.sentiment import SentimentIntensityAnalyzer
+from functools import lru_cache
+from user_knowledge_base import UserKnowledgeBase
+from conversation import Conversation
+from abstract_language_model import AbstractLanguageModel
 
 class EnhancedMultiUserQuestionAnswerCLI:
     def __init__(self, model_factory):
@@ -420,38 +297,3 @@ class EnhancedMultiUserQuestionAnswerCLI:
                 user_data["conversation"].previous_questions = set(conversation_data["previous_questions"])
                 user_data["conversation"].last_question = conversation_data["last_question"]
         return model_loaded and kb_loaded
-
-def main():
-    parser = argparse.ArgumentParser(description="Enhanced Multi-User Fine-Tuned Question-Answer CLI Application")
-    parser.add_argument("--model", type=str, default="t5", help="Name of the model to use (t5, bert, gpt2, roberta)")
-    args = parser.parse_args()
-
-    model_map = {
-        "t5": T5LanguageModel,
-        "bert": BERTLanguageModel,
-        "gpt2": GPT2LanguageModel,
-        "roberta": RoBERTaLanguageModel
-    }
-
-    model_class = model_map.get(args.model)
-    if model_class is None:
-        raise ValueError(f"Unsupported model: {args.model}")
-
-    def model_factory(user_id):
-        model_paths = {
-            "t5": "model_t5",
-            "bert": "model_bert",
-            "gpt2": "model_gpt2",
-            "roberta": "model_roberta"
-        }
-        return model_class(user_id, model_paths[args.model])
-
-    try:
-        qa_cli = EnhancedMultiUserQuestionAnswerCLI(model_factory)
-        qa_cli.run()
-    except Exception as e:
-        logger.error(f"An error occurred: {str(e)}")
-        print("An error occurred. Please check the logs and try again.")
-
-if __name__ == "__main__":
-    main()

@@ -7,11 +7,18 @@ from typing import Dict, List
 import nltk
 from nltk.tokenize import word_tokenize
 from nltk.tag import pos_tag
+from nltk.chunk import ne_chunk
 from nltk.sentiment import SentimentIntensityAnalyzer
 from functools import lru_cache
 from user_knowledge_base import UserKnowledgeBase
-from abstract_language_model import Conversation
+from model_implementations import Conversation
 from abstract_language_model import AbstractLanguageModel
+
+nltk.download('punkt', quiet=True)
+nltk.download('averaged_perceptron_tagger', quiet=True)
+nltk.download('maxent_ne_chunker', quiet=True)
+nltk.download('words', quiet=True)
+nltk.download('vader_lexicon', quiet=True)
 
 class EnhancedMultiUserQuestionAnswerCLI:
     def __init__(self, model_factory):
@@ -20,6 +27,8 @@ class EnhancedMultiUserQuestionAnswerCLI:
         self.user_lock = threading.Lock()
         self.sia = SentimentIntensityAnalyzer()
         self.sentiment_cache = {}
+        self.question_history = set()
+        self.max_question_history = 100
 
     def run(self):
         print("Welcome to the Enhanced Multi-User Fine-Tuned Question-Answer System!")
@@ -56,11 +65,6 @@ class EnhancedMultiUserQuestionAnswerCLI:
 
         print("\nThank you for using the Enhanced Multi-User Fine-Tuned Question-Answer System!")
 
-    @lru_cache(maxsize=1000)
-    def tokenize(self, text: str):
-        user_model = self.get_or_create_user(text.split(':')[0].strip())['model']
-        return user_model.get_tokenizer()(text, return_tensors="pt", max_length=512, truncation=True).input_ids
-
     def get_or_create_user(self, user_id: str) -> Dict:
         with self.user_lock:
             if user_id not in self.users:
@@ -76,108 +80,79 @@ class EnhancedMultiUserQuestionAnswerCLI:
             return self.users[user_id]
 
     def generate_questions(self, context: str, sentiment: float) -> List[str]:
-        prompts = [
-            f"generate diverse questions: {context}",
-            f"ask about different aspects of: {context}",
-            f"what would you like to know more about: {context}",
-            f"create a list of varied questions based on: {context}",
-            f"inquire about various aspects of: {context}"
-        ]
-        
-        all_questions = []
-        user_model = self.get_or_create_user(context.split(':')[0].strip())['model']
-        for prompt in prompts:
-            output = user_model.generate_response(prompt)
-            questions = output.split('\n')  # Assume the model generates a list of questions
-            questions = [f"{q}?" if not q.endswith('?') else q for q in questions]
-            all_questions.extend(self.filter_questions(questions))
-        
-        if not all_questions:
-            entities = self.extract_entities(context)
-            for entity in entities:
-                all_questions.extend(self.generate_entity_questions(entity))
-        
-        all_questions = list(set(all_questions))  # Remove duplicates
-        random.shuffle(all_questions)  # Shuffle for variety
-        
-        if not all_questions:
-            all_questions = self.generate_improved_fallback_questions(context)
-        
-        return all_questions[:5] if all_questions else []  # Return up to 5 questions or an empty list
+        entities = self.extract_entities(context)
+        questions = []
 
-    def filter_questions(self, questions: List[str]) -> List[str]:
-        return [q for q in questions if self.is_valid_question(q)]
+        # Generate questions based on entities
+        for entity in entities:
+            questions.extend(self.generate_entity_questions(entity))
 
-    def is_valid_question(self, question: str) -> bool:
-        if len(question.split()) < 4:
-            return False
-        if not question.endswith('?'):
-            return False
-        if not re.match(r'^[A-Z]', question):
-            return False
-        return True
+        # Generate questions based on the overall context
+        questions.extend(self.generate_context_questions(context))
+
+        # Filter out previously asked questions
+        new_questions = [q for q in questions if q not in self.question_history]
+
+        # Update question history
+        self.question_history.update(new_questions[:5])  # Add up to 5 new questions to history
+        if len(self.question_history) > self.max_question_history:
+            self.question_history = set(list(self.question_history)[-self.max_question_history:])
+
+        print("\nDEBUG - Generated questions:")
+        for q in new_questions:
+            print(f"  - {q}")
+
+        return new_questions[:5] if new_questions else ["Can you provide more information or context?"]
 
     def extract_entities(self, text: str) -> List[str]:
-        words = word_tokenize(text)
-        tagged = pos_tag(words)
-        entities = [word for word, pos in tagged if pos.startswith('NN') or pos.startswith('JJ')]
-        return list(set(entities))
+        tokens = word_tokenize(text)
+        pos_tags = pos_tag(tokens)
+        chunks = ne_chunk(pos_tags)
+        
+        entities = []
+        for chunk in chunks:
+            if hasattr(chunk, 'label'):
+                entities.append(' '.join(c[0] for c in chunk))
+        return entities
 
     def generate_entity_questions(self, entity: str) -> List[str]:
         templates = [
-            f"What is the significance of {entity}?",
-            f"How does {entity} relate to the topic?",
             f"Can you elaborate on {entity}?",
-            f"What are the key aspects of {entity}?",
-            f"How would you describe {entity} to someone unfamiliar with it?"
+            f"How does {entity} relate to our discussion?",
+            f"What's your perspective on {entity}?",
+            f"Could you provide more details about {entity}?",
+            f"How would you describe the importance of {entity}?"
         ]
-        return random.sample(templates, min(3, len(templates)))
+        return random.sample(templates, min(2, len(templates)))
 
-    def generate_improved_fallback_questions(self, context: str) -> List[str]:
-        general_questions = [
-            "What are the main points we've discussed so far?",
-            "How does this information relate to broader concepts in this field?",
-            "What potential implications or applications can we derive from this?",
-            "Are there any alternative perspectives or theories we should consider?",
-            "How has our understanding of this topic evolved over time?",
-            "What questions remain unanswered in this area of study?",
-            "How might this information be relevant to current events or future developments?",
-            "What are some potential challenges or limitations associated with this topic?",
-            "How does this compare to similar concepts or ideas in other fields?",
-            "What further research or exploration would be beneficial in this area?"
+    def generate_context_questions(self, context: str) -> List[str]:
+        words = word_tokenize(context.lower())
+        question_starters = [
+            "How would you describe",
+            "Can you explain",
+            "What's your view on",
+            "How does this relate to",
+            "What are the implications of"
         ]
-        return random.sample(general_questions, 5)
+        questions = []
+        for _ in range(3):
+            if len(words) > 2:
+                phrase = " ".join(random.sample(words, 2))
+                starter = random.choice(question_starters)
+                questions.append(f"{starter} {phrase}?")
+        return questions
 
     def select_question(self, questions: List[str], sentiment: float, user_id: str) -> str:
-        conversation = self.get_or_create_user(user_id)['conversation']
+        if not questions:
+            return "Can you provide more information or context?"
         
-        # Filter out questions that have been asked recently
-        new_questions = [q for q in questions if q not in conversation.previous_questions]
-        
-        if new_questions:
-            selected_question = random.choice(new_questions)
-            self.add_to_previous_questions(conversation, selected_question)
-            return self.adjust_question_for_sentiment(selected_question, sentiment)
-        
-        # If all questions have been asked, reset the previous questions and try again
-        self.reset_previous_questions(conversation)
-        return self.select_question(questions, sentiment, user_id)
-
-    def add_to_previous_questions(self, conversation, question):
-        conversation.previous_questions.add(question)
-        if len(conversation.previous_questions) > 20:  # Keep only the last 20 questions
-            conversation.previous_questions.pop()
-
-    def reset_previous_questions(self, conversation):
-        conversation.previous_questions.clear()
-
-    def adjust_question_for_sentiment(self, question: str, sentiment: float) -> str:
+        selected_question = random.choice(questions)
         if sentiment > 0.05:
-            return f"That's interesting! {question}"
+            return f"That's interesting. {selected_question}"
         elif sentiment < -0.05:
-            return f"I understand this might be challenging. {question}"
+            return f"I see. {selected_question}"
         else:
-            return question
+            return selected_question
 
     def analyze_sentiment(self, text: str) -> float:
         if text in self.sentiment_cache:
@@ -209,14 +184,47 @@ class EnhancedMultiUserQuestionAnswerCLI:
         relevant_knowledge = knowledge_base.get_relevant_knowledge(question)
         context = " ".join(relevant_knowledge)
 
-        input_text = f"context: {context} question: {question}"
-        answer = model.generate_response(input_text)
+        print(f"\nDEBUG - Handling user question: {question}")
+        print(f"DEBUG - Relevant context: {context}")
+
+        input_text = f"Given the context: {context}\n\nPlease provide a detailed answer to the following question: {question}\n\nAnswer:"
+
+        print(f"DEBUG - Input to model: {input_text}")
+
+        # Generate multiple responses with different parameters
+        responses = []
+        generation_params = [
+            {"temperature": 0.7, "top_p": 0.9, "max_length": 100},
+            {"temperature": 1.0, "top_p": 1.0, "max_length": 150},
+            {"temperature": 0.5, "top_p": 0.8, "max_length": 200}
+        ]
+
+        for i, params in enumerate(generation_params):
+            response = model.generate_response(input_text, **params)
+            print(f"DEBUG - Generated response {i+1} (params: {params}): {response}")
+            if not response.strip().endswith('?') and response.strip() != question.strip():
+                responses.append(response)
+
+        if responses:
+            # Select the most diverse response
+            answer = max(responses, key=lambda x: self.calculate_diversity_score(x, responses))
+        else:
+            answer = f"I apologize, but I'm having trouble generating a specific answer to your question: '{question}'. Could you please rephrase or provide more context?"
+
+        print(f"DEBUG - Selected answer: {answer}")
 
         model.fine_tune(input_text, answer)
         knowledge_base.add_knowledge(question, answer)
 
         conversation.last_question = None
-        return f"To answer your question: {answer}"
+        return answer
+
+    def calculate_diversity_score(self, response: str, all_responses: List[str]) -> float:
+        """Calculate a diversity score for a response compared to all other responses."""
+        words = set(response.lower().split())
+        other_words = set(" ".join(all_responses).lower().split())
+        unique_words = words - (words & other_words)
+        return len(unique_words) / len(words) if words else 0
 
     def handle_user_answer(self, answer: str, user_id: str) -> str:
         user_data = self.get_or_create_user(user_id)
@@ -229,13 +237,32 @@ class EnhancedMultiUserQuestionAnswerCLI:
         selected_question = self.select_question(follow_up_questions, sentiment, user_id)
 
         input_text = f"context: {answer} question: {selected_question}"
-        response = model.generate_response(input_text)
 
-        model.fine_tune(input_text, response)
-        knowledge_base.add_knowledge(answer, response)
+        print(f"\nDEBUG - Handling user answer: {answer}")
+        print(f"DEBUG - Input to model: {input_text}")
+
+        # Generate multiple responses with different parameters
+        responses = []
+        generation_params = [
+            {"temperature": 0.7, "top_p": 0.9, "max_length": 100},
+            {"temperature": 1.0, "top_p": 1.0, "max_length": 150},
+            {"temperature": 0.5, "top_p": 0.8, "max_length": 200}
+        ]
+
+        for i, params in enumerate(generation_params):
+            response = model.generate_response(input_text, **params)
+            print(f"DEBUG - Generated response {i+1} (params: {params}): {response}")
+            responses.append(response)
+
+        # Select the most diverse response
+        selected_response = max(responses, key=lambda x: self.calculate_diversity_score(x, responses))
+        print(f"DEBUG - Selected response: {selected_response}")
+
+        model.fine_tune(input_text, selected_response)
+        knowledge_base.add_knowledge(answer, selected_response)
 
         conversation.last_question = selected_question
-        return f"Thank you for your answer. {selected_question}"
+        return f"{selected_response} {selected_question}"
 
     def handle_user_statement(self, statement: str, user_id: str) -> str:
         user_data = self.get_or_create_user(user_id)
@@ -248,16 +275,38 @@ class EnhancedMultiUserQuestionAnswerCLI:
         selected_question = self.select_question(questions, sentiment, user_id)
 
         input_text = f"context: {statement} question: {selected_question}"
-        response = model.generate_response(input_text)
 
-        model.fine_tune(input_text, response)
-        knowledge_base.add_knowledge(statement, response)
+        print(f"\nDEBUG - Handling user statement: {statement}")
+        print(f"DEBUG - Input to model: {input_text}")
+
+        # Generate multiple responses with different parameters
+        responses = []
+        generation_params = [
+            {"temperature": 0.7, "top_p": 0.9, "max_length": 100},
+            {"temperature": 1.0, "top_p": 1.0, "max_length": 150},
+            {"temperature": 0.5, "top_p": 0.8, "max_length": 200}
+        ]
+
+        for i, params in enumerate(generation_params):
+            response = model.generate_response(input_text, **params)
+            print(f"DEBUG - Generated response {i+1} (params: {params}): {response}")
+            responses.append(response)
+
+        # Select the most diverse response
+        selected_response = max(responses, key=lambda x: self.calculate_diversity_score(x, responses))
+        print(f"DEBUG - Selected response: {selected_response}")
+
+        model.fine_tune(input_text, selected_response)
+        knowledge_base.add_knowledge(statement, selected_response)
 
         conversation.last_question = selected_question
-        return f"Interesting point. {selected_question}"
+        return f"{selected_response} {selected_question}"
 
     def process_user_input(self, user_id: str, user_input: str) -> str:
         input_type = self.determine_input_type(user_input, user_id)
+
+        print(f"\nDEBUG - Processing user input: {user_input}")
+        print(f"DEBUG - Determined input type: {input_type}")
 
         if input_type == "question":
             response = self.handle_user_question(user_input, user_id)
@@ -267,12 +316,9 @@ class EnhancedMultiUserQuestionAnswerCLI:
             response = self.handle_user_statement(user_input, user_id)
 
         user_data = self.get_or_create_user(user_id)
-        user_data["conversation"].conversation_history += f" {user_input} {response}"
+        user_data["conversation"].conversation_history += f" User: {user_input} AI: {response}"
         
-        # If no question was generated, add a generic prompt
-        if not response.endswith('?'):
-            response += " Is there anything else you'd like to discuss?"
-        
+        print(f"DEBUG - Final response: {response}")
         return response
 
     def save_user_data(self, user_id: str):

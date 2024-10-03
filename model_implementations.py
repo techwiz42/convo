@@ -17,9 +17,16 @@ import nltk
 nltk.download('punkt', quiet=True)
 nltk.download('averaged_perceptron_tagger', quiet=True)
 
+class Conversation:
+    def __init__(self, user_id: str):
+        self.user_id = user_id
+        self.conversation_history = ""
+        self.previous_questions = set()
+        self.last_question = None
+
 class AbstractLanguageModel(ABC):
     @abstractmethod
-    def generate_response(self, input_text: str) -> str:
+    def generate_response(self, input_text: str, temperature: float = 0.7, top_p: float = 0.9, max_length: int = 100) -> str:
         pass
 
     @abstractmethod
@@ -63,9 +70,16 @@ class T5LanguageModel(AbstractLanguageModel):
             self.model = T5ForConditionalGeneration.from_pretrained("t5-small").to(self.device)
             self.tokenizer = T5Tokenizer.from_pretrained("t5-small")
 
-    def generate_response(self, input_text: str) -> str:
+    def generate_response(self, input_text: str, temperature: float = 0.7, top_p: float = 0.9, max_length: int = 100) -> str:
         input_ids = self.tokenizer(input_text, return_tensors="pt", max_length=512, truncation=True).input_ids.to(self.device)
-        output = self.model.generate(input_ids, max_length=128, num_return_sequences=1)
+        output = self.model.generate(
+            input_ids, 
+            max_length=max_length, 
+            temperature=temperature, 
+            top_p=top_p, 
+            do_sample=True, 
+            num_return_sequences=1
+        )
         return self.tokenizer.decode(output[0], skip_special_tokens=True)
 
     def fine_tune(self, input_text: str, target_text: str):
@@ -121,7 +135,7 @@ class BERTLanguageModel(AbstractLanguageModel):
             self.model = BertForQuestionAnswering.from_pretrained("bert-base-uncased").to(self.device)
             self.tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
 
-    def generate_response(self, input_text: str) -> str:
+    def generate_response(self, input_text: str, temperature: float = 0.7, top_p: float = 0.9, max_length: int = 100) -> str:
         inputs = self.tokenizer(input_text, return_tensors="pt", max_length=512, truncation=True).to(self.device)
         outputs = self.model(**inputs)
         answer_start = torch.argmax(outputs.start_logits)
@@ -191,9 +205,17 @@ class GPT2LanguageModel(AbstractLanguageModel):
 
         self.tokenizer.pad_token = self.tokenizer.eos_token
 
-    def generate_response(self, input_text: str) -> str:
+    def generate_response(self, input_text: str, temperature: float = 0.7, top_p: float = 0.9, max_length: int = 100) -> str:
         input_ids = self.tokenizer.encode(input_text, return_tensors="pt").to(self.device)
-        output = self.model.generate(input_ids, max_length=150, num_return_sequences=1, no_repeat_ngram_size=2)
+        output = self.model.generate(
+            input_ids, 
+            max_length=max_length, 
+            temperature=temperature, 
+            top_p=top_p, 
+            do_sample=True, 
+            num_return_sequences=1,
+            no_repeat_ngram_size=2
+        )
         return self.tokenizer.decode(output[0], skip_special_tokens=True)
 
     def fine_tune(self, input_text: str, target_text: str):
@@ -250,7 +272,7 @@ class RoBERTaLanguageModel(AbstractLanguageModel):
             self.model = RobertaForQuestionAnswering.from_pretrained("roberta-base").to(self.device)
             self.tokenizer = RobertaTokenizer.from_pretrained("roberta-base")
 
-    def generate_response(self, input_text: str) -> str:
+    def generate_response(self, input_text: str, temperature: float = 0.7, top_p: float = 0.9, max_length: int = 100) -> str:
         inputs = self.tokenizer(input_text, return_tensors="pt", max_length=512, truncation=True).to(self.device)
         outputs = self.model(**inputs)
         answer_start = torch.argmax(outputs.start_logits)

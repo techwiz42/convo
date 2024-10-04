@@ -8,6 +8,7 @@ from transformers import (
     AutoModelForCausalLM,
     get_linear_schedule_with_warmup
 )
+import traceback
 from torch.optim import AdamW
 from torch.utils.data import Dataset, DataLoader
 from tqdm import tqdm
@@ -174,85 +175,93 @@ def train(model, train_dataloader, val_dataloader, device, num_epochs, learning_
     return model
 
 def main():
-    parser = argparse.ArgumentParser(description="Fine-tune a model for bidirectional question answering")
-    parser.add_argument("--model_type", type=str, required=True, choices=['gpt2', 't5', 'bert', 'roberta', 'flan-t5', 'gpt-j'], help="Type of model to fine-tune")
-    parser.add_argument("--model_name", type=str, default=None, help="Specific model name (e.g., 'gpt2-medium', 't5-base')")
-    parser.add_argument("--train_data", type=str, required=True, help="Path to the training data JSON file")
-    parser.add_argument("--val_data", type=str, required=True, help="Path to the validation data JSON file")
-    parser.add_argument("--num_epochs", type=int, default=3, help="Number of training epochs")
-    parser.add_argument("--batch_size", type=int, default=4, help="Batch size for training")
-    parser.add_argument("--learning_rate", type=float, default=5e-5, help="Learning rate for optimizer")
-    parser.add_argument("--output_dir", type=str, default="./fine_tuned_model", help="Directory to save the fine-tuned model")
-    parser.add_argument("--gradient_accumulation_steps", type=int, default=2, help="Number of updates steps to accumulate before performing a backward/update pass")
-    args = parser.parse_args()
+    try:
+        parser = argparse.ArgumentParser(description="Fine-tune a model for bidirectional question answering")
+        parser.add_argument("--model_type", type=str, required=True, choices=['gpt2', 't5', 'bert', 'roberta', 'flan-t5', 'gpt-j'], help="Type of model to fine-tune")
+        parser.add_argument("--model_name", type=str, default=None, help="Specific model name (e.g., 'gpt2-medium', 't5-base')")
+        parser.add_argument("--train_data", type=str, required=True, help="Path to the training data JSON file")
+        parser.add_argument("--val_data", type=str, required=True, help="Path to the validation data JSON file")
+        parser.add_argument("--num_epochs", type=int, default=3, help="Number of training epochs")
+        parser.add_argument("--batch_size", type=int, default=4, help="Batch size for training")
+        parser.add_argument("--learning_rate", type=float, default=5e-5, help="Learning rate for optimizer")
+        parser.add_argument("--output_dir", type=str, default="./fine_tuned_model", help="Directory to save the fine-tuned model")
+        parser.add_argument("--gradient_accumulation_steps", type=int, default=2, help="Number of updates steps to accumulate before performing a backward/update pass")
+        args = parser.parse_args()
 
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print(f"Using device: {device}")
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        print(f"Using device: {device}")
 
-    print("Loading tokenizer and model...")
-    if args.model_name is None:
-        args.model_name = args.model_type
+        print("Loading tokenizer and model...")
+        if args.model_name is None:
+            args.model_name = args.model_type
 
-    if os.path.exists(args.output_dir):
-        print(f"Loading previously fine-tuned model from {args.output_dir}")
-        if args.model_type == 'gpt2':
-            model = GPT2LMHeadModel.from_pretrained(args.output_dir)
-            tokenizer = GPT2Tokenizer.from_pretrained(args.output_dir)
-        elif args.model_type == 't5':
-            model = T5ForConditionalGeneration.from_pretrained(args.output_dir)
-            tokenizer = T5Tokenizer.from_pretrained(args.output_dir)
-        elif args.model_type == 'bert':
-            model = BertForQuestionAnswering.from_pretrained(args.output_dir)
-            tokenizer = BertTokenizer.from_pretrained(args.output_dir)
-        elif args.model_type == 'roberta':
-            model = RobertaForQuestionAnswering.from_pretrained(args.output_dir)
-            tokenizer = RobertaTokenizer.from_pretrained(args.output_dir)
-        elif args.model_type == 'flan-t5':
-            model = AutoModelForSeq2SeqLM.from_pretrained(args.output_dir)
-            tokenizer = AutoTokenizer.from_pretrained(args.output_dir)
-        elif args.model_type == 'gpt-j':
-            model = AutoModelForCausalLM.from_pretrained(args.output_dir)
-            tokenizer = AutoTokenizer.from_pretrained(args.output_dir)
-    else:
-        print(f"Loading base model {args.model_name}")
-        if args.model_type == 'gpt2':
-            model = GPT2LMHeadModel.from_pretrained(args.model_name)
-            tokenizer = GPT2Tokenizer.from_pretrained(args.model_name)
-        elif args.model_type == 't5':
-            model = T5ForConditionalGeneration.from_pretrained(args.model_name)
-            tokenizer = T5Tokenizer.from_pretrained(args.model_name)
-        elif args.model_type == 'bert':
-            model = BertForQuestionAnswering.from_pretrained(args.model_name)
-            tokenizer = BertTokenizer.from_pretrained(args.model_name)
-        elif args.model_type == 'roberta':
-            model = RobertaForQuestionAnswering.from_pretrained(args.model_name)
-            tokenizer = RobertaTokenizer.from_pretrained(args.model_name)
-        elif args.model_type == 'flan-t5':
-            model = AutoModelForSeq2SeqLM.from_pretrained("google/flan-t5-base")
-            tokenizer = AutoTokenizer.from_pretrained("google/flan-t5-base")
-        elif args.model_type == 'gpt-j':
-            model = AutoModelForCausalLM.from_pretrained("EleutherAI/gpt-j-6B")
-            tokenizer = AutoTokenizer.from_pretrained("EleutherAI/gpt-j-6B")
+        if os.path.exists(args.output_dir):
+            print(f"Loading previously fine-tuned model from {args.output_dir}")
+            if args.model_type == 'gpt2':
+                model = GPT2LMHeadModel.from_pretrained(args.output_dir)
+                tokenizer = GPT2Tokenizer.from_pretrained(args.output_dir)
+            elif args.model_type == 't5':
+                model = T5ForConditionalGeneration.from_pretrained(args.output_dir)
+                tokenizer = T5Tokenizer.from_pretrained(args.output_dir)
+            elif args.model_type == 'bert':
+                model = BertForQuestionAnswering.from_pretrained(args.output_dir)
+                tokenizer = BertTokenizer.from_pretrained(args.output_dir)
+            elif args.model_type == 'roberta':
+                model = RobertaForQuestionAnswering.from_pretrained(args.output_dir)
+                tokenizer = RobertaTokenizer.from_pretrained(args.output_dir)
+            elif args.model_type == 'flan-t5':
+                model = AutoModelForSeq2SeqLM.from_pretrained(args.output_dir)
+                tokenizer = AutoTokenizer.from_pretrained(args.output_dir)
+            elif args.model_type == 'gpt-j':
+                model = AutoModelForCausalLM.from_pretrained(args.output_dir)
+                tokenizer = AutoTokenizer.from_pretrained(args.output_dir)
+        else:
+            print(f"Loading base model {args.model_name}")
+            if args.model_type == 'gpt2':
+                model = GPT2LMHeadModel.from_pretrained(args.model_name)
+                tokenizer = GPT2Tokenizer.from_pretrained(args.model_name)
+            elif args.model_type == 't5':
+                model = T5ForConditionalGeneration.from_pretrained(args.model_name)
+                tokenizer = T5Tokenizer.from_pretrained(args.model_name)
+            elif args.model_type == 'bert':
+                model = BertForQuestionAnswering.from_pretrained(args.model_name)
+                tokenizer = BertTokenizer.from_pretrained(args.model_name)
+            elif args.model_type == 'roberta':
+                model = RobertaForQuestionAnswering.from_pretrained(args.model_name)
+                tokenizer = RobertaTokenizer.from_pretrained(args.model_name)
+            elif args.model_type == 'flan-t5':
+                model = AutoModelForSeq2SeqLM.from_pretrained("google/flan-t5-base")
+                tokenizer = AutoTokenizer.from_pretrained("google/flan-t5-base")
+            elif args.model_type == 'gpt-j':
+                model = AutoModelForCausalLM.from_pretrained("EleutherAI/gpt-j-6B")
+                tokenizer = AutoTokenizer.from_pretrained("EleutherAI/gpt-j-6B")
 
-    if args.model_type in ['gpt2', 'gpt-j']:
-        tokenizer.pad_token = tokenizer.eos_token
-        model.config.pad_token_id = model.config.eos_token_id
+        if args.model_type in ['gpt2', 'gpt-j']:
+            tokenizer.pad_token = tokenizer.eos_token
+            model.config.pad_token_id = model.config.eos_token_id
 
-    model = model.to(device)
+        model = model.to(device)
 
-    print("Preparing datasets...")
-    train_data = load_json_data(args.train_data)
-    val_data = load_json_data(args.val_data)
+        print("Preparing datasets...")
+        train_data = load_json_data(args.train_data)
+        val_data = load_json_data(args.val_data)
 
-    train_dataset = BidirectionalQADataset(train_data, tokenizer, args.model_type)
-    val_dataset = BidirectionalQADataset(val_data, tokenizer, args.model_type)
+        train_dataset = BidirectionalQADataset(train_data, tokenizer, args.model_type)
+        val_dataset = BidirectionalQADataset(val_data, tokenizer, args.model_type)
 
-    train_dataloader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True)
-    val_dataloader = DataLoader(val_dataset, batch_size=args.batch_size)
+        train_dataloader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True)
+        val_dataloader = DataLoader(val_dataset, batch_size=args.batch_size)
 
-    print("Starting fine-tuning...")
-    fine_tuned_model = train(model, train_dataloader, val_dataloader, device, args.num_epochs, args.learning_rate, args.gradient_accumulation_steps, args.model_type)
+        print("Starting fine-tuning...")
+        fine_tuned_model = train(model, train_dataloader, val_dataloader, device, args.num_epochs, args.learning_rate, args.gradient_accumulation_steps, args.model_type)
 
-    print(f"Saving fine-tuned model to {args.output_dir}")
-    fine_tuned_model.save_pretrained(args.output_dir)
-    tokenizer.save
+        print(f"Saving fine-tuned model to {args.output_dir}")
+        fine_tuned_model.save_pretrained(args.output_dir)
+        tokenizer.save
+    except Exception as e:
+        print(f"An error occurred: {str(e)}")
+        import traceback
+        traceback.print_exc()
+
+if __name__ == "__main__":
+    main()

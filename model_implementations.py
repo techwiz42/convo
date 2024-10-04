@@ -310,29 +310,6 @@ class RoBERTaLanguageModel(AbstractLanguageModel):
     def get_tokenizer(self) -> PreTrainedTokenizer:
         return self.tokenizer
 
-class AbstractLanguageModel(ABC):
-    @abstractmethod
-    def generate_response(self, input_text: str, temperature: float = 0.7, top_p: float = 0.9, max_length: int = 100) -> str:
-        pass
-
-    @abstractmethod
-    def fine_tune(self, input_text: str, target_text: str):
-        pass
-
-    @abstractmethod
-    def save(self, path: str):
-        pass
-
-    @abstractmethod
-    def load(self, path: str) -> bool:
-        pass
-
-    @abstractmethod
-    def get_tokenizer(self) -> PreTrainedTokenizer:
-        pass
-
-# ... [Keep the existing T5LanguageModel, BERTLanguageModel, GPT2LanguageModel, and RoBERTaLanguageModel classes] ...
-
 class FLANT5LanguageModel(AbstractLanguageModel):
     def __init__(self, user_id: str, model_path: str):
         self.user_id = user_id

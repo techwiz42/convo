@@ -4,6 +4,8 @@ from transformers import (
     T5ForConditionalGeneration, T5Tokenizer,
     BertForQuestionAnswering, BertTokenizer,
     RobertaForQuestionAnswering, RobertaTokenizer,
+    AutoModelForSeq2SeqLM, AutoTokenizer,
+    AutoModelForCausalLM,
     get_linear_schedule_with_warmup
 )
 from torch.optim import AdamW
@@ -24,16 +26,9 @@ class BidirectionalQADataset(Dataset):
             context = item['context']
             for question, answer in zip(item['questions'], item['answers']):
                 self.examples.append({
-                    'input': question,
-                    'output': answer,
+                    'question': question,
+                    'answer': answer,
                     'context': context,
-                    'type': 'question'
-                })
-                self.examples.append({
-                    'input': answer,
-                    'output': question,
-                    'context': context,
-                    'type': 'answer'
                 })
 
     def __len__(self):
@@ -41,24 +36,18 @@ class BidirectionalQADataset(Dataset):
 
     def __getitem__(self, idx):
         item = self.examples[idx]
-        if self.model_type == 'gpt2':
-            if item['type'] == 'question':
-                input_text = f"Context: {item['context']} Q: {item['input']} A:"
-            else:
-                input_text = f"Context: {item['context']} A: {item['input']} Q:"
+        if self.model_type in ['gpt2', 'gpt-j']:
+            input_text = f"Context: {item['context']} Q: {item['question']} A:"
             encoding = self.tokenizer(input_text, max_length=self.max_length, padding='max_length', truncation=True, return_tensors='pt')
-            target_encoding = self.tokenizer(item['output'], max_length=self.max_length, padding='max_length', truncation=True, return_tensors='pt')
+            target_encoding = self.tokenizer(item['answer'], max_length=self.max_length, padding='max_length', truncation=True, return_tensors='pt')
             return {
                 'input_ids': encoding['input_ids'].squeeze(),
                 'attention_mask': encoding['attention_mask'].squeeze(),
                 'labels': target_encoding['input_ids'].squeeze()
             }
-        elif self.model_type == 't5':
-            if item['type'] == 'question':
-                input_text = f"answer: {item['context']} {item['input']}"
-            else:
-                input_text = f"generate question: {item['context']} {item['input']}"
-            target_text = item['output']
+        elif self.model_type in ['t5', 'flan-t5']:
+            input_text = f"question: {item['question']} context: {item['context']}"
+            target_text = item['answer']
             input_encoding = self.tokenizer(input_text, max_length=self.max_length, padding='max_length', truncation=True, return_tensors='pt')
             target_encoding = self.tokenizer(target_text, max_length=self.max_length, padding='max_length', truncation=True, return_tensors='pt')
             return {
@@ -67,11 +56,26 @@ class BidirectionalQADataset(Dataset):
                 'labels': target_encoding['input_ids'].squeeze()
             }
         elif self.model_type in ['bert', 'roberta']:
-            encoding = self.tokenizer(item['context'], item['input'], max_length=self.max_length, padding='max_length', truncation=True, return_tensors='pt')
+            encoding = self.tokenizer(item['question'], item['context'], max_length=self.max_length, padding='max_length', truncation=True, return_tensors='pt')
+            input_ids = encoding['input_ids'].squeeze()
+            attention_mask = encoding['attention_mask'].squeeze()
+            
+            answer_start = item['context'].index(item['answer'])
+            answer_end = answer_start + len(item['answer'])
+            
+            start_positions = encoding.char_to_token(answer_start)
+            end_positions = encoding.char_to_token(answer_end - 1)
+            
+            if start_positions is None:
+                start_positions = 0
+            if end_positions is None:
+                end_positions = 0
+            
             return {
-                'input_ids': encoding['input_ids'].squeeze(),
-                'attention_mask': encoding['attention_mask'].squeeze(),
-                'token_type_ids': encoding.get('token_type_ids', torch.zeros_like(encoding['input_ids'])).squeeze(),
+                'input_ids': input_ids,
+                'attention_mask': attention_mask,
+                'start_positions': torch.tensor(start_positions, dtype=torch.long),
+                'end_positions': torch.tensor(end_positions, dtype=torch.long)
             }
 
 def load_json_data(file_path):
@@ -94,12 +98,13 @@ def train(model, train_dataloader, val_dataloader, device, num_epochs, learning_
             input_ids = batch['input_ids'].to(device)
             attention_mask = batch['attention_mask'].to(device)
             
-            if model_type in ['gpt2', 't5']:
+            if model_type in ['gpt2', 't5', 'flan-t5', 'gpt-j']:
                 labels = batch['labels'].to(device)
                 outputs = model(input_ids=input_ids, attention_mask=attention_mask, labels=labels)
             elif model_type in ['bert', 'roberta']:
-                token_type_ids = batch['token_type_ids'].to(device)
-                outputs = model(input_ids=input_ids, attention_mask=attention_mask, token_type_ids=token_type_ids)
+                start_positions = batch['start_positions'].to(device)
+                end_positions = batch['end_positions'].to(device)
+                outputs = model(input_ids=input_ids, attention_mask=attention_mask, start_positions=start_positions, end_positions=end_positions)
             
             loss = outputs.loss / gradient_accumulation_steps
             loss.backward()
@@ -117,10 +122,10 @@ def train(model, train_dataloader, val_dataloader, device, num_epochs, learning_
                 progress_bar.set_postfix({'loss': f"{total_loss / (step + 1):.4f}"})
             
             del input_ids, attention_mask, outputs
-            if model_type in ['gpt2', 't5']:
+            if model_type in ['gpt2', 't5', 'flan-t5', 'gpt-j']:
                 del labels
             if model_type in ['bert', 'roberta']:
-                del token_type_ids
+                del start_positions, end_positions
             torch.cuda.empty_cache()
         
         progress_bar.close()
@@ -139,12 +144,13 @@ def train(model, train_dataloader, val_dataloader, device, num_epochs, learning_
                 input_ids = batch['input_ids'].to(device)
                 attention_mask = batch['attention_mask'].to(device)
                 
-                if model_type in ['gpt2', 't5']:
+                if model_type in ['gpt2', 't5', 'flan-t5', 'gpt-j']:
                     labels = batch['labels'].to(device)
                     outputs = model(input_ids=input_ids, attention_mask=attention_mask, labels=labels)
                 elif model_type in ['bert', 'roberta']:
-                    token_type_ids = batch['token_type_ids'].to(device)
-                    outputs = model(input_ids=input_ids, attention_mask=attention_mask, token_type_ids=token_type_ids)
+                    start_positions = batch['start_positions'].to(device)
+                    end_positions = batch['end_positions'].to(device)
+                    outputs = model(input_ids=input_ids, attention_mask=attention_mask, start_positions=start_positions, end_positions=end_positions)
                 
                 loss = outputs.loss
                 total_val_loss += loss.item()
@@ -154,10 +160,10 @@ def train(model, train_dataloader, val_dataloader, device, num_epochs, learning_
                     val_progress_bar.set_postfix({'loss': f"{total_val_loss / (step + 1):.4f}"})
                 
                 del input_ids, attention_mask, outputs
-                if model_type in ['gpt2', 't5']:
+                if model_type in ['gpt2', 't5', 'flan-t5', 'gpt-j']:
                     del labels
                 if model_type in ['bert', 'roberta']:
-                    del token_type_ids
+                    del start_positions, end_positions
                 torch.cuda.empty_cache()
         
         val_progress_bar.close()
@@ -169,7 +175,7 @@ def train(model, train_dataloader, val_dataloader, device, num_epochs, learning_
 
 def main():
     parser = argparse.ArgumentParser(description="Fine-tune a model for bidirectional question answering")
-    parser.add_argument("--model_type", type=str, required=True, choices=['gpt2', 't5', 'bert', 'roberta'], help="Type of model to fine-tune")
+    parser.add_argument("--model_type", type=str, required=True, choices=['gpt2', 't5', 'bert', 'roberta', 'flan-t5', 'gpt-j'], help="Type of model to fine-tune")
     parser.add_argument("--model_name", type=str, default=None, help="Specific model name (e.g., 'gpt2-medium', 't5-base')")
     parser.add_argument("--train_data", type=str, required=True, help="Path to the training data JSON file")
     parser.add_argument("--val_data", type=str, required=True, help="Path to the validation data JSON file")
@@ -185,21 +191,9 @@ def main():
 
     print("Loading tokenizer and model...")
     if args.model_name is None:
-        if args.model_type == 't5':
-            args.model_name = 't5-base'
-        elif args.model_type == 'bert':
-            args.model_name = 'bert-base-uncased'
-        elif args.model_type == 'roberta':
-            args.model_name = 'roberta-base'
-        else:
-            args.model_name = args.model_type
+        args.model_name = args.model_type
 
-    # Function to check if the output directory contains a valid model
-    def is_valid_model_dir(dir_path):
-        return os.path.exists(os.path.join(dir_path, "config.json")) and \
-               os.path.exists(os.path.join(dir_path, "pytorch_model.bin"))
-
-    if os.path.exists(args.output_dir) and is_valid_model_dir(args.output_dir):
+    if os.path.exists(args.output_dir):
         print(f"Loading previously fine-tuned model from {args.output_dir}")
         if args.model_type == 'gpt2':
             model = GPT2LMHeadModel.from_pretrained(args.output_dir)
@@ -213,6 +207,12 @@ def main():
         elif args.model_type == 'roberta':
             model = RobertaForQuestionAnswering.from_pretrained(args.output_dir)
             tokenizer = RobertaTokenizer.from_pretrained(args.output_dir)
+        elif args.model_type == 'flan-t5':
+            model = AutoModelForSeq2SeqLM.from_pretrained(args.output_dir)
+            tokenizer = AutoTokenizer.from_pretrained(args.output_dir)
+        elif args.model_type == 'gpt-j':
+            model = AutoModelForCausalLM.from_pretrained(args.output_dir)
+            tokenizer = AutoTokenizer.from_pretrained(args.output_dir)
     else:
         print(f"Loading base model {args.model_name}")
         if args.model_type == 'gpt2':
@@ -227,8 +227,14 @@ def main():
         elif args.model_type == 'roberta':
             model = RobertaForQuestionAnswering.from_pretrained(args.model_name)
             tokenizer = RobertaTokenizer.from_pretrained(args.model_name)
+        elif args.model_type == 'flan-t5':
+            model = AutoModelForSeq2SeqLM.from_pretrained("google/flan-t5-base")
+            tokenizer = AutoTokenizer.from_pretrained("google/flan-t5-base")
+        elif args.model_type == 'gpt-j':
+            model = AutoModelForCausalLM.from_pretrained("EleutherAI/gpt-j-6B")
+            tokenizer = AutoTokenizer.from_pretrained("EleutherAI/gpt-j-6B")
 
-    if args.model_type == 'gpt2':
+    if args.model_type in ['gpt2', 'gpt-j']:
         tokenizer.pad_token = tokenizer.eos_token
         model.config.pad_token_id = model.config.eos_token_id
 
@@ -249,7 +255,4 @@ def main():
 
     print(f"Saving fine-tuned model to {args.output_dir}")
     fine_tuned_model.save_pretrained(args.output_dir)
-    tokenizer.save_pretrained(args.output_dir)
-
-if __name__ == "__main__":
-    main()
+    tokenizer.save

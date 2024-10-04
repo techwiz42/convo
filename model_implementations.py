@@ -1,8 +1,10 @@
 from transformers import (
+    GPT2LMHeadModel, GPT2Tokenizer,
     T5ForConditionalGeneration, T5Tokenizer,
     BertForQuestionAnswering, BertTokenizer,
-    GPT2LMHeadModel, GPT2Tokenizer,
     RobertaForQuestionAnswering, RobertaTokenizer,
+    AutoModelForSeq2SeqLM, AutoTokenizer,
+    AutoModelForCausalLM,
     PreTrainedTokenizer
 )
 import torch
@@ -302,6 +304,159 @@ class RoBERTaLanguageModel(AbstractLanguageModel):
         if os.path.exists(self.user_model_path):
             self.model = RobertaForQuestionAnswering.from_pretrained(self.user_model_path).to(self.device)
             self.tokenizer = RobertaTokenizer.from_pretrained(self.user_model_path)
+            return True
+        return False
+
+    def get_tokenizer(self) -> PreTrainedTokenizer:
+        return self.tokenizer
+
+class AbstractLanguageModel(ABC):
+    @abstractmethod
+    def generate_response(self, input_text: str, temperature: float = 0.7, top_p: float = 0.9, max_length: int = 100) -> str:
+        pass
+
+    @abstractmethod
+    def fine_tune(self, input_text: str, target_text: str):
+        pass
+
+    @abstractmethod
+    def save(self, path: str):
+        pass
+
+    @abstractmethod
+    def load(self, path: str) -> bool:
+        pass
+
+    @abstractmethod
+    def get_tokenizer(self) -> PreTrainedTokenizer:
+        pass
+
+# ... [Keep the existing T5LanguageModel, BERTLanguageModel, GPT2LanguageModel, and RoBERTaLanguageModel classes] ...
+
+class FLANT5LanguageModel(AbstractLanguageModel):
+    def __init__(self, user_id: str, model_path: str):
+        self.user_id = user_id
+        self.model_path = model_path
+        self.user_model_path = f".models/{user_id}_flan_t5"
+
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+        # Set timeout for downloads
+        utils.TIMEOUT = 1200
+        requests.adapters.DEFAULT_RETRIES = 5
+        requests.DEFAULT_RETRIES = 5
+        socket.setdefaulttimeout(1200)
+
+        # Initialize model and tokenizer
+        if os.path.exists(self.user_model_path):
+            self.model = AutoModelForSeq2SeqLM.from_pretrained(self.user_model_path).to(self.device)
+            self.tokenizer = AutoTokenizer.from_pretrained(self.user_model_path)
+        elif os.path.exists(self.model_path):
+            self.model = AutoModelForSeq2SeqLM.from_pretrained(self.model_path).to(self.device)
+            self.tokenizer = AutoTokenizer.from_pretrained(self.model_path)
+        else:
+            self.model = AutoModelForSeq2SeqLM.from_pretrained("google/flan-t5-base").to(self.device)
+            self.tokenizer = AutoTokenizer.from_pretrained("google/flan-t5-base")
+
+    def generate_response(self, input_text: str, temperature: float = 0.7, top_p: float = 0.9, max_length: int = 100) -> str:
+        input_ids = self.tokenizer(f"Generate a response to the following: {input_text}", return_tensors="pt", max_length=512, truncation=True).input_ids.to(self.device)
+        outputs = self.model.generate(
+            input_ids, 
+            max_length=max_length, 
+            temperature=temperature, 
+            top_p=top_p, 
+            do_sample=True, 
+            num_return_sequences=1
+        )
+        return self.tokenizer.decode(outputs[0], skip_special_tokens=True)
+
+    def fine_tune(self, input_text: str, target_text: str):
+        input_ids = self.tokenizer(input_text, return_tensors="pt", max_length=512, truncation=True).input_ids.to(self.device)
+        target_ids = self.tokenizer(target_text, return_tensors="pt", max_length=512, truncation=True).input_ids.to(self.device)
+
+        outputs = self.model(input_ids=input_ids, labels=target_ids)
+        loss = outputs.loss
+        
+        if loss is not None:
+            loss.backward()
+            optimizer = torch.optim.AdamW(self.model.parameters(), lr=1e-5)
+            optimizer.step()
+        else:
+            print("Warning: Loss is None. Check input formatting.")
+
+    def save(self, path: str):
+        self.model.save_pretrained(self.user_model_path)
+        self.tokenizer.save_pretrained(self.user_model_path)
+
+    def load(self, path: str) -> bool:
+        if os.path.exists(self.user_model_path):
+            self.model = AutoModelForSeq2SeqLM.from_pretrained(self.user_model_path).to(self.device)
+            self.tokenizer = AutoTokenizer.from_pretrained(self.user_model_path)
+            return True
+        return False
+
+    def get_tokenizer(self) -> PreTrainedTokenizer:
+        return self.tokenizer
+
+class GPTJLanguageModel(AbstractLanguageModel):
+    def __init__(self, user_id: str, model_path: str):
+        self.user_id = user_id
+        self.model_path = model_path
+        self.user_model_path = f".models/{user_id}_gptj"
+
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+        # Set timeout for downloads
+        utils.TIMEOUT = 1200
+        requests.adapters.DEFAULT_RETRIES = 5
+        requests.DEFAULT_RETRIES = 5
+        socket.setdefaulttimeout(1200)
+
+        # Initialize model and tokenizer
+        if os.path.exists(self.user_model_path):
+            self.model = AutoModelForCausalLM.from_pretrained(self.user_model_path).to(self.device)
+            self.tokenizer = AutoTokenizer.from_pretrained(self.user_model_path)
+        elif os.path.exists(self.model_path):
+            self.model = AutoModelForCausalLM.from_pretrained(self.model_path).to(self.device)
+            self.tokenizer = AutoTokenizer.from_pretrained(self.model_path)
+        else:
+            self.model = AutoModelForCausalLM.from_pretrained("EleutherAI/gpt-j-6B").to(self.device)
+            self.tokenizer = AutoTokenizer.from_pretrained("EleutherAI/gpt-j-6B")
+
+    def generate_response(self, input_text: str, temperature: float = 0.7, top_p: float = 0.9, max_length: int = 100) -> str:
+        input_ids = self.tokenizer(f"Human: {input_text}\nAI:", return_tensors="pt", max_length=512, truncation=True).input_ids.to(self.device)
+        outputs = self.model.generate(
+            input_ids, 
+            max_length=max_length, 
+            temperature=temperature, 
+            top_p=top_p, 
+            do_sample=True, 
+            num_return_sequences=1
+        )
+        return self.tokenizer.decode(outputs[0], skip_special_tokens=True)
+
+    def fine_tune(self, input_text: str, target_text: str):
+        input_ids = self.tokenizer(input_text, return_tensors="pt", max_length=512, truncation=True).input_ids.to(self.device)
+        target_ids = self.tokenizer(target_text, return_tensors="pt", max_length=512, truncation=True).input_ids.to(self.device)
+
+        outputs = self.model(input_ids=input_ids, labels=target_ids)
+        loss = outputs.loss
+        
+        if loss is not None:
+            loss.backward()
+            optimizer = torch.optim.AdamW(self.model.parameters(), lr=1e-5)
+            optimizer.step()
+        else:
+            print("Warning: Loss is None. Check input formatting.")
+
+    def save(self, path: str):
+        self.model.save_pretrained(self.user_model_path)
+        self.tokenizer.save_pretrained(self.user_model_path)
+
+    def load(self, path: str) -> bool:
+        if os.path.exists(self.user_model_path):
+            self.model = AutoModelForCausalLM.from_pretrained(self.user_model_path).to(self.device)
+            self.tokenizer = AutoTokenizer.from_pretrained(self.user_model_path)
             return True
         return False
 

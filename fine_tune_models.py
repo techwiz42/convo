@@ -185,9 +185,21 @@ def main():
 
     print("Loading tokenizer and model...")
     if args.model_name is None:
-        args.model_name = args.model_type
+        if args.model_type == 't5':
+            args.model_name = 't5-base'
+        elif args.model_type == 'bert':
+            args.model_name = 'bert-base-uncased'
+        elif args.model_type == 'roberta':
+            args.model_name = 'roberta-base'
+        else:
+            args.model_name = args.model_type
 
-    if os.path.exists(args.output_dir):
+    # Function to check if the output directory contains a valid model
+    def is_valid_model_dir(dir_path):
+        return os.path.exists(os.path.join(dir_path, "config.json")) and \
+               os.path.exists(os.path.join(dir_path, "pytorch_model.bin"))
+
+    if os.path.exists(args.output_dir) and is_valid_model_dir(args.output_dir):
         print(f"Loading previously fine-tuned model from {args.output_dir}")
         if args.model_type == 'gpt2':
             model = GPT2LMHeadModel.from_pretrained(args.output_dir)

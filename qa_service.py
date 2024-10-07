@@ -8,15 +8,20 @@ from model_implementations import create_model
 from enhanced_multi_user_qa_cli import EnhancedMultiUserQuestionAnswerCLI
 import traceback
 import warnings
-from contextlib import redirect_stderr
+from contextlib import redirect_stderr, redirect_stdout
+import sys
 
-warnings.filterwarnings("ignore", category=UserWarning)
+# Suppress all warnings
+warnings.filterwarnings("ignore")
 
 # Configure logging
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.ERROR)
 logger = logging.getLogger(__name__)
 
-logging.getLogger('tensorflow').setLevel(logging.ERROR)
+# Suppress specific loggers
+for log_name, log_obj in logging.Logger.manager.loggerDict.items():
+    if isinstance(log_obj, logging.Logger):
+        log_obj.setLevel(logging.ERROR)
 
 # Set a longer timeout
 utils.TIMEOUT = 1200
@@ -33,7 +38,25 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'  # Suppress TensorFlow logging
 os.environ['CUDA_DEVICE_ORDER'] = 'PCI_BUS_ID'  # Ensure correct CUDA device ordering
 os.environ['CUDA_VISIBLE_DEVICES'] = '0'  # Use only the first GPU
 
+# Suppress stdout and stderr
+class DummyFile(object):
+    def write(self, x): pass
+    def flush(self): pass
 
+def suppress_output(func):
+    def wrapper(*args, **kwargs):
+        save_stdout = sys.stdout
+        save_stderr = sys.stderr
+        sys.stdout = DummyFile()
+        sys.stderr = DummyFile()
+        try:
+            return func(*args, **kwargs)
+        finally:
+            sys.stdout = save_stdout
+            sys.stderr = save_stderr
+    return wrapper
+
+@suppress_output
 def model_factory(model_type):
     def create_model_instance(user_id):
         model_paths = {
@@ -71,6 +94,8 @@ def main():
 
 if __name__ == "__main__":
     try:
-        main()
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            main()
     except Exception as e:
         print(traceback.format_exc())

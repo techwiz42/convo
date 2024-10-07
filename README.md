@@ -117,14 +117,6 @@ You can extend the system by:
 3. Improving the `TextAnalyzer` class with additional analysis capabilities
 4. Modifying the fine-tuning process in `fine_tune_models.py` for specific requirements
 
-## Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
-
-## License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
 ## Acknowledgments
 
 - Thanks to the Hugging Face team for their `transformers` library

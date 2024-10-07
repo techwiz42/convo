@@ -5,6 +5,7 @@ import requests
 import socket
 from model_implementations import T5LanguageModel, BERTLanguageModel, GPT2LanguageModel, RoBERTaLanguageModel, FLANT5LanguageModel, GPTJLanguageModel
 from enhanced_multi_user_qa_cli import EnhancedMultiUserQuestionAnswerCLI
+import traceback
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -52,7 +53,7 @@ def main():
     parser = argparse.ArgumentParser(description="Enhanced Multi-User Fine-Tuned Question-Answer CLI Application")
     parser.add_argument("--model", type=str, default="t5", choices=["t5", "bert", "gpt2", "roberta", "flan-t5", "gpt-j"], help="Name of the model to use")
     args = parser.parse_args()
-
+    print(f"args {args}")
     model_class = model_factory(args.model)
     if model_class is None:
         raise ValueError(f"Unsupported model: {args.model}")
@@ -65,4 +66,8 @@ def main():
         print("An error occurred. Please check the logs and try again.")
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception as e:
+        print(traceback.format_exc())
+

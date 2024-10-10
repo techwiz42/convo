@@ -36,6 +36,8 @@ configure_requests()
 configure_socket()
 configure_environment()
 
+logger = logging.getLogger()
+
 # Suppress stdout and stderr
 class DummyFile(object):
     def write(self, x): pass
@@ -80,7 +82,7 @@ def model_factory(model_type):
         }
         
         try:
-            return create_model(model_type, user_id, model_paths[model_type])
+            return create_model(model_type, model_paths[model_type])
         except Exception as e:
             logger.error(f"Error creating model {model_type}: {str(e)}")
             logger.error(traceback.format_exc())

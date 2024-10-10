@@ -71,7 +71,7 @@ def suppress_output(func):
 
 @suppress_output
 def model_factory(model_type):
-    def create_model_instance(user_id):
+    def create_model_instance():
         model_paths = {
             "t5": "t5-small",
             "bert": "bert-base-uncased",
@@ -82,7 +82,8 @@ def model_factory(model_type):
         }
         
         try:
-            return create_model(model_type, model_paths[model_type])
+            model_path = "/home/scooter/projects/convo/models" #FIXME
+            return create_model(model_type, model_path)
         except Exception as e:
             logger.error(f"Error creating model {model_type}: {str(e)}")
             logger.error(traceback.format_exc())
@@ -90,21 +91,50 @@ def model_factory(model_type):
     
     return create_model_instance
 
+def create_shared_model(model_type):
+    model_paths = {
+        "t5": "t5-small",
+        "bert": "bert-base-uncased",
+        "gpt2": "gpt2",
+        "roberta": "roberta-base",
+        "flan-t5": "google/flan-t5-small",
+        "gpt-j": "EleutherAI/gpt-j-6B"
+    }
+    
+    #model_dir = os.environ.get("MODEL_DIR", "models")
+    #model_path = os.path.join(model_dir, model_paths[model_type])
+    model_path = "/home/scooter/projects/convo/models" #FIXME
+    if not os.path.exists(model_path):
+        raise FileNotFoundError(f"Model not found at {model_path}. Please ensure the model is downloaded and placed in the correct directory.")
+    
+    try:
+        return create_model(model_type, model_path)
+    except Exception as e:
+        logger.error(f"Error creating model {model_type}: {str(e)}")
+        logger.error(traceback.format_exc())
+        raise ValueError(f"Failed to create model {model_type}. Please check the logs for more details.")
+
 def main():
     warnings.filterwarnings("ignore")
     parser = argparse.ArgumentParser(description="Enhanced Multi-User Fine-Tuned Question-Answer CLI Application")
     parser.add_argument("--model", type=str, default="t5", choices=["t5", "bert", "gpt2", "roberta", "flan-t5", "gpt-j"], help="Name of the model to use")
     args = parser.parse_args()
     print(f"args {args}")
-    model_class = model_factory(args.model)
 
     try:
-        qa_cli = EnhancedMultiUserQuestionAnswerCLI(model_class)
+        shared_model = create_shared_model(args.model)
+        qa_cli = EnhancedMultiUserQuestionAnswerCLI(shared_model)
         qa_cli.run()
+    except FileNotFoundError as e:
+        print(f"Error: {str(e)}")
+        print("Please download the model and place it in the 'models' directory, or set the MODEL_DIR environment variable to specify a custom location.")
+    except ValueError as e:
+        print(f"Error: {str(e)}")
+        print("Please check the logs for more details and ensure the selected model is supported.")
     except Exception as e:
-        logging.error(f"An error occurred: {str(e)}")
+        logging.error(f"An unexpected error occurred: {str(e)}")
         logging.error(traceback.format_exc())
-        print("An error occurred. Please check the logs and try again.")
+        print("An unexpected error occurred. Please check the logs and try again.")
 
 if __name__ == "__main__":
     warnings.filterwarnings("ignore")

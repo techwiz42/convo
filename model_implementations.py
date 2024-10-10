@@ -26,16 +26,16 @@ def get_model_class(model_name: str):
         'roberta': RoBERTaLanguageModel,
         'flan-t5': FLANT5LanguageModel
     }
-    return model_classes.get(model_name.lower())
+    return model_classes.get(model_name)
 
-def create_model(model_name: str, user_id: str, model_path: str) -> AbstractLanguageModel:
+def create_model(model_name: str,  model_path: str) -> AbstractLanguageModel:
     ModelClass = get_model_class(model_name)
     if ModelClass is None:
         raise ValueError(f"Unsupported model: {model_name}")
-    return ModelClass(user_id, model_path)
+    return ModelClass("/home/scooter/projects/convo/models", model_name) #FIXME
 
 # Example usage
 if __name__ == "__main__":
-    model = create_model('gpt2', 'test_user', 'path/to/model')
+    model = create_model('gpt2', 'path/to/model')
     response = model.generate_response("Hello, how are you?")
     print(response)

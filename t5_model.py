@@ -4,15 +4,21 @@ import torch
 from transformers import T5ForConditionalGeneration, T5Tokenizer
 from abstract_model import AbstractLanguageModel
 import traceback
+import os
+import traceback
 
 class T5LanguageModel(AbstractLanguageModel):
-    def __init__(self, model_path: str):
-        self.model_path = model_path
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    def __init__(self, model_name, model_path: str):
+        try:
+            self.model_path = os.path.join(model_name, model_path)
+            self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-        # Initialize model and tokenizer
-        self.model = T5ForConditionalGeneration.from_pretrained(model_path).to(self.device)
-        self.tokenizer = T5Tokenizer.from_pretrained(model_path)
+            # Initialize model and tokenizer
+            print(f"MODEL PATH: {self.model_path}")
+            self.model = T5ForConditionalGeneration.from_pretrained(model_path).to(self.device)
+            self.tokenizer = T5Tokenizer.from_pretrained(self.model_path)
+        except Exception as e:
+            print(traceback.format_exc())
 
     def generate_response(self, input_text: str, temperature: float = 0.7, top_p: float = 0.9, max_new_tokens: int = 100) -> str:
         try:

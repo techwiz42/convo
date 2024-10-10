@@ -1,4 +1,4 @@
-# CONVO - A Conversational LLM
+# CONVO - A Curious Conversational LLM
 LLMs are good at answering questions. They should be able to ask them as well.
 This implements a PyTorch-based implementation of a language model that generates questions using 
 the Hugging Face Transformers library. We'll use a pre-trained model and fine-tune it for question generation. 

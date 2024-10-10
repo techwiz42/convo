@@ -1,24 +1,18 @@
-import os
+# roberta_model.py
+
 import torch
 from transformers import RobertaForMaskedLM, RobertaTokenizer
 from abstract_model import AbstractLanguageModel
 import traceback
 
 class RoBERTaLanguageModel(AbstractLanguageModel):
-    def __init__(self, user_id: str, model_path: str):
-        self.user_id = user_id
+    def __init__(self, model_path: str):
         self.model_path = model_path
-        self.user_model_path = f".models/{user_id}_roberta"
-
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
         # Initialize model and tokenizer
-        if os.path.exists(self.user_model_path):
-            self.model = RobertaForMaskedLM.from_pretrained(self.user_model_path).to(self.device)
-            self.tokenizer = RobertaTokenizer.from_pretrained(self.user_model_path)
-        else:
-            self.model = RobertaForMaskedLM.from_pretrained(model_path).to(self.device)
-            self.tokenizer = RobertaTokenizer.from_pretrained(model_path)
+        self.model = RobertaForMaskedLM.from_pretrained(model_path).to(self.device)
+        self.tokenizer = RobertaTokenizer.from_pretrained(model_path)
 
     def generate_response(self, input_text: str, temperature: float = 0.7, top_p: float = 0.9, max_new_tokens: int = 100) -> str:
         try:
@@ -102,9 +96,9 @@ class RoBERTaLanguageModel(AbstractLanguageModel):
 
     def save(self, path: str):
         try:
-            print(f"Saving model to {self.user_model_path}")
-            self.model.save_pretrained(self.user_model_path)
-            self.tokenizer.save_pretrained(self.user_model_path)
+            print(f"Saving model to {path}")
+            self.model.save_pretrained(path)
+            self.tokenizer.save_pretrained(path)
             print("Model saved successfully")
         except Exception as e:
             print(f"Error saving model: {str(e)}")
@@ -112,15 +106,11 @@ class RoBERTaLanguageModel(AbstractLanguageModel):
 
     def load(self, path: str) -> bool:
         try:
-            if os.path.exists(self.user_model_path):
-                print(f"Loading model from {self.user_model_path}")
-                self.model = RobertaForMaskedLM.from_pretrained(self.user_model_path).to(self.device)
-                self.tokenizer = RobertaTokenizer.from_pretrained(self.user_model_path)
-                print("Model loaded successfully")
-                return True
-            else:
-                print(f"No saved model found at {self.user_model_path}")
-                return False
+            print(f"Loading model from {path}")
+            self.model = RobertaForMaskedLM.from_pretrained(path).to(self.device)
+            self.tokenizer = RobertaTokenizer.from_pretrained(path)
+            print("Model loaded successfully")
+            return True
         except Exception as e:
             print(f"Error loading model: {str(e)}")
             print(traceback.format_exc())

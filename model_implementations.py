@@ -10,7 +10,6 @@ from t5_model import T5LanguageModel
 from bert_model import BERTLanguageModel
 from roberta_model import RoBERTaLanguageModel
 from flan_t5_model import FLANT5LanguageModel
-from gptj_model import GPTJLanguageModel
 
 class Conversation:
     def __init__(self, user_id: str):
@@ -25,8 +24,7 @@ def get_model_class(model_name: str):
         't5': T5LanguageModel,
         'bert': BERTLanguageModel,
         'roberta': RoBERTaLanguageModel,
-        'flan-t5': FLANT5LanguageModel,
-        'gptj': GPTJLanguageModel
+        'flan-t5': FLANT5LanguageModel
     }
     return model_classes.get(model_name.lower())
 

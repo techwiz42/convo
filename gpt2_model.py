@@ -2,14 +2,14 @@ import os
 import torch
 from transformers import GPT2LMHeadModel, GPT2Tokenizer
 from abstract_model import AbstractLanguageModel
-from text_anysis import TextAnalyzer
+from text_analysis import TextAnalyzer
 import traceback
 
 class GPT2LanguageModel(AbstractLanguageModel):
     def __init__(self, model_type: str, model_path: str):
         self.model_path = os.path.join(model_path, model_type)
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.test_analyzer = TextAnalyzer()
+        self.text_analyzer = TextAnalyzer()
         
         print(f"Loading model from: {self.model_path}")
         if os.path.exists(self.model_path):
@@ -30,49 +30,74 @@ class GPT2LanguageModel(AbstractLanguageModel):
         self.tokenizer.pad_token = self.tokenizer.eos_token
         self.model.config.pad_token_id = self.tokenizer.eos_token_id
 
-    def generate_response(self, input_text: str, context: str = "", temperature: float = 1.0, top_p: float = 1.0, max_new_tokens: int = 50) -> List[str]:
+class GPT2LanguageModel(AbstractLanguageModel):
+    def __init__(self, model_type: str, model_path: str):
+        self.model_path = os.path.join(model_path, model_type)
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        
+        print(f"Loading model from: {self.model_path}")
+        if os.path.exists(self.model_path):
+            try:
+                self.model = GPT2LMHeadModel.from_pretrained(self.model_path).to(self.device)
+                self.tokenizer = GPT2Tokenizer.from_pretrained(self.model_path)
+                print("Loaded locally trained model")
+            except Exception as e:
+                print(f"Error loading local model: {str(e)}")
+                print("Falling back to default GPT-2 model")
+                self.model = GPT2LMHeadModel.from_pretrained("gpt2").to(self.device)
+                self.tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
+        else:
+            print(f"Local model not found at {self.model_path}. Loading default GPT-2 model.")
+            self.model = GPT2LMHeadModel.from_pretrained("gpt2").to(self.device)
+            self.tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
+
+        self.tokenizer.pad_token = self.tokenizer.eos_token
+        self.model.config.pad_token_id = self.tokenizer.eos_token_id
+
+    def generate_response(self, input_text: str, temperature: float = 0.7, top_p: float = 0.9, max_new_tokens: int = 100) -> str:
         try:
-            full_input = f"{context}\n{input_text}".strip()
-            input_ids = self.tokenizer.encode(full_input, return_tensors="pt").to(self.device)
+            # Tokenize input text
+            input_ids = self.tokenizer.encode(input_text, return_tensors="pt").to(self.device)
             attention_mask = torch.ones(input_ids.shape, dtype=torch.long, device=self.device)
-            max_length = min(self.model.config.n_positions, input_ids.shape[1] + max_new_tokens)
-
-            responses = {}
-            param_sets = [
-                {"temperature": 0.7, "top_p": 0.9},
-                {"temperature": 1.0, "top_p": 1.0},
-                {"temperature": 1.2, "top_p": 0.95}
-            ]
-
-            for params in param_sets:
+            
+            # Generate response
+            with torch.no_grad():
                 output = self.model.generate(
                     input_ids,
                     attention_mask=attention_mask,
-                    max_length=max_length,
-                    temperature=params["temperature"],
-                    top_p=params["top_p"],
+                    max_length=input_ids.shape[1] + max_new_tokens,
+                    temperature=temperature,
+                    top_p=top_p,
                     do_sample=True,
                     num_return_sequences=1,
                     no_repeat_ngram_size=3,
                     repetition_penalty=1.2,
                     pad_token_id=self.tokenizer.eos_token_id
                 )
-                generated_text = self.tokenizer.decode(output[0], skip_special_tokens=True)
-                new_text = generated_text[len(full_input):].strip()
-                sentiment, grammar = text_analyzer.analyze(new_text)
             
-                if not new_text:
-                    print(f"Warning: No new text generated for params: {params}")
-                    new_text = "Null" 
-                    score = -1
-                print(f"{new_text}, {score}\n\n")
-                responses.update({"response" new_text, "score": abs(sentiment) + grammar})
-
-            return max(responses, key=lambda x: x["score"]).get("response")
+            generated_text = self.tokenizer.decode(output[0], skip_special_tokens=True)
+            new_text = generated_text[len(input_text):].strip()
+            
+            if not new_text:
+                new_text = "I'm sorry, but I couldn't generate a meaningful response. Could you please rephrase your input?"
+            
+            return new_text
+        except RuntimeError as e:
+            if "CUDA out of memory" in str(e):
+                print("CUDA out of memory. Attempting to free cache and retry...")
+                torch.cuda.empty_cache()
+                # Retry generation with reduced parameters
+                return self.generate_response(input_text, temperature, top_p, max(50, max_new_tokens // 2))
+            else:
+                print(f"CUDA error: {str(e)}. Falling back to CPU.")
+                self.device = torch.device("cpu")
+                self.model = self.model.to(self.device)
+                return self.generate_response(input_text, temperature, top_p, max_new_tokens)
         except Exception as e:
             print(f"Error in generate_response: {str(e)}")
             print(traceback.format_exc())
-            return ["An error occurred while generating the response. Please try again."] * 3
+            return "An error occurred while generating the response. Please try again."
+
 
     def fine_tune(self, input_text: str, target_text: str):
         try:

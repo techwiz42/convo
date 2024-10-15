@@ -1,51 +1,61 @@
-# t5_model.py
-
 import torch
 from transformers import T5ForConditionalGeneration, T5Tokenizer
 from abstract_model import AbstractLanguageModel
 import traceback
 import os
-import traceback
 
 class T5LanguageModel(AbstractLanguageModel):
-    def __init__(self, model_name, model_path: str):
+    def __init__(self, model_type: str, model_path: str):
         try:
-            self.model_path = "/home/scooter/projects/convo/t5" #FIXME
+            self.model_path = os.path.join(model_path, model_type)
             self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
             # Initialize model and tokenizer
             print(f"MODEL PATH: {self.model_path}")
-            self.model = T5ForConditionalGeneration.from_pretrained(model_path).to(self.device)
-            self.tokenizer = T5Tokenizer.from_pretrained(self.model_path)
+            if os.path.exists(self.model_path):
+                self.model = T5ForConditionalGeneration.from_pretrained(self.model_path).to(self.device)
+                self.tokenizer = T5Tokenizer.from_pretrained(self.model_path)
+                print("Loaded locally trained model")
+            else:
+                print(f"Local model not found at {self.model_path}. Loading default T5 model.")
+                self.model = T5ForConditionalGeneration.from_pretrained(model_type).to(self.device)
+                self.tokenizer = T5Tokenizer.from_pretrained(model_type)
+            
+            self.model.eval()  # Set the model to evaluation mode
         except Exception as e:
+            print(f"Error initializing T5 model: {str(e)}")
             print(traceback.format_exc())
 
-    def generate_response(self, input_text: str, temperature: float = 0.7, top_p: float = 0.9, max_new_tokens: int = 100) -> str:
+    def generate_response(self, input_text: str, temperature: float = 0.8, top_p: float = 0.9, max_new_tokens: int = 100) -> str:
         try:
-            input_ids = self.tokenizer.encode(input_text, return_tensors="pt").to(self.device)
-            attention_mask = torch.ones(input_ids.shape, dtype=torch.long, device=self.device)
-        
-            # T5 doesn't have a max_position_embeddings attribute, so we'll use a fixed maximum length
-            max_length = min(1024, input_ids.shape[1] + max_new_tokens)
-        
-            output = self.model.generate(
-                input_ids,
-                attention_mask=attention_mask,
-                max_length=max_length,
-                temperature=temperature,
-                top_p=top_p,
-                do_sample=True,
-                num_return_sequences=1,
-                no_repeat_ngram_size=3,
-                repetition_penalty=1.2
-            )
-        
-            generated_text = self.tokenizer.decode(output[0], skip_special_tokens=True)
-        
-            if not generated_text:
-                generated_text = "I'm sorry, but I couldn't generate a meaningful response. Could you please rephrase your input?"
-        
-            return generated_text
+            # Tokenize input text
+            input_ids = self.tokenizer.encode(input_text, return_tensors="pt", add_special_tokens=True).to(self.device)
+            
+            # Generate response
+            with torch.no_grad():
+                outputs = self.model.generate(
+                    input_ids,
+                    max_length=input_ids.shape[1] + max_new_tokens,
+                    min_length=input_ids.shape[1] + 20,  # Ensure some new tokens are generated
+                    temperature=temperature,
+                    top_p=top_p,
+                    do_sample=True,
+                    num_return_sequences=1,
+                    no_repeat_ngram_size=2,
+                    repetition_penalty=1.2,
+                    pad_token_id=self.tokenizer.pad_token_id,
+                    eos_token_id=self.tokenizer.eos_token_id,
+                    early_stopping=True,
+                )
+            
+            # Decode the generated tokens, ignoring the input
+            generated_text = self.tokenizer.decode(outputs[0][input_ids.shape[1]:], skip_special_tokens=True)
+            
+            # If the generated text is too short or empty, try again with different parameters
+            if len(generated_text.split()) < 5:
+                return self.generate_response(input_text, temperature=1.0, top_p=0.95, max_new_tokens=max_new_tokens + 50)
+            
+            return generated_text.strip()
         except RuntimeError as e:
             if "CUDA out of memory" in str(e):
                 print("CUDA out of memory. Attempting to free cache and retry...")
@@ -62,17 +72,15 @@ class T5LanguageModel(AbstractLanguageModel):
             print(traceback.format_exc())
             return "An error occurred while generating the response. Please try again."
 
+
     def fine_tune(self, input_text: str, target_text: str):
         try:
-            # Only fine-tune if the target_text is not an error message
             if "An error occurred" not in target_text and len(target_text.split()) > 5:
+                input_text = f"generate response: {input_text}"
                 input_ids = self.tokenizer(input_text, return_tensors="pt", max_length=512, truncation=True).input_ids.to(self.device)
                 target_ids = self.tokenizer(target_text, return_tensors="pt", max_length=512, truncation=True).input_ids.to(self.device)
 
-                # Ensure input and target have the same batch size
-                if input_ids.size(0) != target_ids.size(0):
-                    target_ids = target_ids[:input_ids.size(0), :]
-
+                self.model.train()
                 outputs = self.model(input_ids=input_ids, labels=target_ids)
                 loss = outputs.loss
             
@@ -83,6 +91,8 @@ class T5LanguageModel(AbstractLanguageModel):
                     print(f"Fine-tuning completed. Loss: {loss.item()}")
                 else:
                     print("Warning: Loss is None. Skipping fine-tuning.")
+                
+                self.model.eval()  # Set back to evaluation mode after fine-tuning
             else:
                 print("Skipping fine-tuning due to invalid target text.")
         except Exception as e:
@@ -104,6 +114,7 @@ class T5LanguageModel(AbstractLanguageModel):
             print(f"Loading model from {path}")
             self.model = T5ForConditionalGeneration.from_pretrained(path).to(self.device)
             self.tokenizer = T5Tokenizer.from_pretrained(path)
+            self.model.eval()  # Set the model to evaluation mode
             print("Model loaded successfully")
             return True
         except Exception as e:

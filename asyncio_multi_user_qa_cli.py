@@ -24,6 +24,7 @@ class AsyncEnhancedMultiUserQuestionAnswerCLI:
         self.text_analyzer = TextAnalyzer()
         self.question_history = set()
         self.max_question_history = 100
+        self.stopped = False
 
     async def process_user_input(self, user_id: str, user_input: str) -> str:
         user_data = await self.get_or_create_user(user_id)  # Correctly await this coroutine
@@ -84,18 +85,21 @@ class AsyncEnhancedMultiUserQuestionAnswerCLI:
             }
         return self.users[user_id]
 
+    def stop(self):
+        self.stopped = True
+
     async def run(self):
         print("Starting Async Enhanced Multi-User Question Answer CLI")
         print("Type 'exit' to quit")
 
-        while True:
+        while not self.stopped:
             user_id = await asyncio.to_thread(input, "Enter your user ID: ")
-            if user_id.lower() == 'exit':
+            if user_id.lower() == 'exit' or self.stopped:
                 break
 
-            while True:
+            while not self.stopped:
                 user_input = await asyncio.to_thread(input, f"[{user_id}] Enter your question: ")
-                if user_input.lower() == 'exit':
+                if user_input.lower() == 'exit' or self.stopped:
                     break
 
                 response = await self.process_user_input(user_id, user_input)

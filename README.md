@@ -232,13 +232,6 @@ logger = logging.getLogger(__name__)
 logger.debug("Some debug information")
 ```
 
-### Continuous Integration
-
-[If applicable, add information about your CI setup here]
-### Continuous Integration
-
-[If applicable, add information about your CI setup here]
-
 ## Development Roadmap
 
 - Implement a web interface or multi-client network application to fully utilize the concurrent conversation capabilities.

@@ -5,7 +5,7 @@ from abc import ABC, abstractmethod
 
 class AbstractLanguageModel(ABC):
     @abstractmethod
-    def generate_response(self, input_text: str, temperature: float = 0.7, top_p: float = 0.9, max_new_tokens: int = 100) -> str:
+    def generate_response(self, input_text: str, temperature: float = 0.7, top_p: float = 0.9, max_length: int = 100) -> str:
         pass
 
     @abstractmethod

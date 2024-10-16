@@ -9,31 +9,6 @@ class GPT2LanguageModel(AbstractLanguageModel):
     def __init__(self, model_type: str, model_path: str):
         self.model_path = os.path.join(model_path, model_type)
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.text_analyzer = TextAnalyzer()
-        
-        print(f"Loading model from: {self.model_path}")
-        if os.path.exists(self.model_path):
-            try:
-                self.model = GPT2LMHeadModel.from_pretrained(self.model_path).to(self.device)
-                self.tokenizer = GPT2Tokenizer.from_pretrained(self.model_path)
-                print("Loaded locally trained model")
-            except Exception as e:
-                print(f"Error loading local model: {str(e)}")
-                print("Falling back to default GPT-2 model")
-                self.model = GPT2LMHeadModel.from_pretrained("gpt2").to(self.device)
-                self.tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
-        else:
-            print(f"Local model not found at {self.model_path}. Loading default GPT-2 model.")
-            self.model = GPT2LMHeadModel.from_pretrained("gpt2").to(self.device)
-            self.tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
-        #print(f"Model config: {self.model.config}")      
-        self.tokenizer.pad_token = self.tokenizer.eos_token
-        self.model.config.pad_token_id = self.tokenizer.eos_token_id
-
-class GPT2LanguageModel(AbstractLanguageModel):
-    def __init__(self, model_type: str, model_path: str):
-        self.model_path = os.path.join(model_path, model_type)
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         
         print(f"Loading model from: {self.model_path}")
         if os.path.exists(self.model_path):

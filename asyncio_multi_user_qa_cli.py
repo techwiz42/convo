@@ -39,9 +39,9 @@ class AsyncEnhancedMultiUserQuestionAnswerCLI:
 
         # Generate multiple responses with different parameters
         generation_params = [
-            {"temperature": 0.7, "top_p": 0.9, "max_new_tokens": 100},
-            {"temperature": 1.0, "top_p": 1.0, "max_new_tokens": 150},
-            {"temperature": 0.5, "top_p": 0.8, "max_new_tokens": 200}
+            {"temperature": 0.9, "top_p": 0.9, "max_length": 100},
+            {"temperature": 1.0, "top_p": 1.0, "max_length": 150},
+            {"temperature": 0.7, "top_p": 0.8, "max_length": 200}
         ]
 
         async def generate_response(params):

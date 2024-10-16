@@ -1,40 +1,61 @@
-# flan_t5_model.py
-
 import torch
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 from abstract_model import AbstractLanguageModel
 import traceback
+import os
 
 class FLANT5LanguageModel(AbstractLanguageModel):
-    def __init__(self, model_path: str):
-        self.model_path = "/home/scooter/projects/convo/flan-t5" #FIXME
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-        # Initialize model and tokenizer
-        self.model = AutoModelForSeq2SeqLM.from_pretrained(model_path).to(self.device)
-        self.tokenizer = AutoTokenizer.from_pretrained(model_path)
-
-    def generate_response(self, input_text: str, temperature: float = 0.7, top_p: float = 0.9, max_new_tokens: int = 100) -> str:
+    def __init__(self, model_type: str, model_path: str):
         try:
+            self.model_path = os.path.join(model_path, model_type)
+            self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+            # Initialize model and tokenizer
+            print(f"MODEL PATH: {self.model_path}")
+            if os.path.exists(self.model_path):
+                self.model = AutoModelForSeq2SeqLM.from_pretrained(self.model_path).to(self.device)
+                self.tokenizer = AutoTokenizer.from_pretrained(self.model_path)
+                print("Loaded locally trained model")
+            else:
+                print(f"Local model not found at {self.model_path}. Loading default FLAN-T5 model.")
+                self.model = AutoModelForSeq2SeqLM.from_pretrained("google/flan-t5-base").to(self.device)
+                self.tokenizer = AutoTokenizer.from_pretrained("google/flan-t5-base")
+            
+            self.model.eval()  # Set the model to evaluation mode
+        except Exception as e:
+            print(f"Error initializing FLAN-T5 model: {str(e)}")
+            print(traceback.format_exc())
+
+    def generate_response(self, input_text: str, temperature: float = 0.8, top_p: float = 0.9, max_new_tokens: int = 100) -> str:
+        try:
+            # Tokenize input text
             input_ids = self.tokenizer(f"Generate a response: {input_text}", return_tensors="pt", max_length=512, truncation=True).input_ids.to(self.device)
             
-            outputs = self.model.generate(
-                input_ids,
-                max_new_tokens=max_new_tokens,
-                temperature=temperature,
-                top_p=top_p,
-                do_sample=True,
-                num_return_sequences=1,
-                no_repeat_ngram_size=3,
-                repetition_penalty=1.2
-            )
+            # Generate response
+            with torch.no_grad():
+                outputs = self.model.generate(
+                    input_ids,
+                    max_length=input_ids.shape[1] + max_new_tokens,
+                    min_length=input_ids.shape[1] + 20,  # Ensure some new tokens are generated
+                    temperature=temperature,
+                    top_p=top_p,
+                    do_sample=True,
+                    num_return_sequences=1,
+                    no_repeat_ngram_size=2,
+                    repetition_penalty=1.2,
+                    pad_token_id=self.tokenizer.pad_token_id,
+                    eos_token_id=self.tokenizer.eos_token_id,
+                    early_stopping=True,
+                )
             
-            generated_text = self.tokenizer.decode(outputs[0], skip_special_tokens=True)
+            # Decode the generated tokens, ignoring the input
+            generated_text = self.tokenizer.decode(outputs[0][input_ids.shape[1]:], skip_special_tokens=True)
             
-            if not generated_text:
-                generated_text = "I'm sorry, but I couldn't generate a meaningful response. Could you please rephrase your input?"
+            # If the generated text is too short or empty, try again with different parameters
+            if len(generated_text.split()) < 5:
+                return self.generate_response(input_text, temperature=1.0, top_p=0.95, max_new_tokens=max_new_tokens + 50)
             
-            return generated_text
+            return generated_text.strip()
         except RuntimeError as e:
             if "CUDA out of memory" in str(e):
                 print("CUDA out of memory. Attempting to free cache and retry...")
@@ -53,12 +74,13 @@ class FLANT5LanguageModel(AbstractLanguageModel):
 
     def fine_tune(self, input_text: str, target_text: str):
         try:
-            # Only fine-tune if the target_text is not an error message
             if "An error occurred" not in target_text and len(target_text.split()) > 5:
-                inputs = self.tokenizer(f"Generate a response: {input_text}", return_tensors="pt", max_length=512, truncation=True).input_ids.to(self.device)
-                targets = self.tokenizer(target_text, return_tensors="pt", max_length=512, truncation=True).input_ids.to(self.device)
+                input_text = f"Generate a response: {input_text}"
+                input_ids = self.tokenizer(input_text, return_tensors="pt", max_length=512, truncation=True).input_ids.to(self.device)
+                target_ids = self.tokenizer(target_text, return_tensors="pt", max_length=512, truncation=True).input_ids.to(self.device)
 
-                outputs = self.model(input_ids=inputs, labels=targets)
+                self.model.train()
+                outputs = self.model(input_ids=input_ids, labels=target_ids)
                 loss = outputs.loss
             
                 if loss is not None:
@@ -68,6 +90,8 @@ class FLANT5LanguageModel(AbstractLanguageModel):
                     print(f"Fine-tuning completed. Loss: {loss.item()}")
                 else:
                     print("Warning: Loss is None. Skipping fine-tuning.")
+                
+                self.model.eval()  # Set back to evaluation mode after fine-tuning
             else:
                 print("Skipping fine-tuning due to invalid target text.")
         except Exception as e:
@@ -89,6 +113,7 @@ class FLANT5LanguageModel(AbstractLanguageModel):
             print(f"Loading model from {path}")
             self.model = AutoModelForSeq2SeqLM.from_pretrained(path).to(self.device)
             self.tokenizer = AutoTokenizer.from_pretrained(path)
+            self.model.eval()  # Set the model to evaluation mode
             print("Model loaded successfully")
             return True
         except Exception as e:

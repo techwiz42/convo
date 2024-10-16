@@ -129,7 +129,7 @@ if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser(description="Run the AsyncEnhancedMultiUserQuestionAnswerCLI")
     parser.add_argument("--model", type=str, required=True, help="Model name")
-    parser.add_argument("--model_path", type=str, required=True, help="Model path")
+    parser.add_argument("--model_path", default="./models", type=str, help="Model path")
     args = parser.parse_args()
 
     asyncio.run(main(args))

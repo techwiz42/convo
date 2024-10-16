@@ -17,6 +17,7 @@ import json
 import argparse
 import os
 
+DECREASE_RATE = 0.5
 
 class BidirectionalQADataset(Dataset):
     def __init__(self, data, tokenizer, model_type, max_length=128):
@@ -24,7 +25,6 @@ class BidirectionalQADataset(Dataset):
         self.tokenizer = tokenizer
         self.max_length = max_length
         self.model_type = model_type
-
         for item in data:
             context = item['context']
             for question, answer in zip(item.get('questions'), item.get('answers')):
@@ -116,6 +116,7 @@ def load_json_data(file_path):
     return data
 
 def train(model, train_dataloader, val_dataloader, device, num_epochs, learning_rate, gradient_accumulation_steps, model_type):
+    torch.cuda.empty_cache()
     optimizer = AdamW(model.parameters(), lr=learning_rate)
     total_steps = len(train_dataloader) * num_epochs // gradient_accumulation_steps
     scheduler = get_linear_schedule_with_warmup(optimizer, num_warmup_steps=0, num_training_steps=total_steps)
@@ -221,7 +222,8 @@ def train(model, train_dataloader, val_dataloader, device, num_epochs, learning_
                 torch.cuda.empty_cache()
         
         val_progress_bar.close()
-        
+        learning_rate *= DECREASE_RATE
+        print(f"Learning rate decreased to {learning_rate}") 
         avg_val_loss = total_val_loss / len(val_dataloader)
         print(f"Validation completed. Average validation loss: {avg_val_loss:.4f}")
     

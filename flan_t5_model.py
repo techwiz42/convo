@@ -25,10 +25,20 @@ class FLANT5LanguageModel(AbstractLanguageModel):
             self.model = AutoModelForSeq2SeqLM.from_pretrained("google/flan-t5-base").to(self.device)
             self.tokenizer = AutoTokenizer.from_pretrained("google/flan-t5-base")
 
-    def generate_response(self, input_text: str, temperature: float = 0.7, top_p: float = 0.9, max_new_tokens: int = 200, min_new_tokens: int = 100) -> str:
+    def generate_response(self, input_text: str, context: str = "", previous_input: str = "", temperature: float = 0.7, top_p: float = 0.9, max_new_tokens: int = 200, min_new_tokens: int = 100) -> str:
         try:
-            # Tokenize input text
-            input_ids = self.tokenizer(input_text, return_tensors="pt").input_ids.to(self.device)
+            # Determine the type of response to generate
+            if context and previous_input:
+                return self.generate_dialogue_continuation(context, previous_input, temperature, top_p, max_new_tokens, min_new_tokens)
+            elif context:
+                formatted_input = f"Context: {context} Instruction: {input_text}"
+            elif previous_input:
+                formatted_input = f"Previous input: {previous_input} Instruction: {input_text}"
+            else:
+                formatted_input = f"Instruction: {input_text}"
+
+            # Tokenize formatted input
+            input_ids = self.tokenizer(formatted_input, return_tensors="pt").input_ids.to(self.device)
             
             # Generate response
             with torch.no_grad():
@@ -42,39 +52,61 @@ class FLANT5LanguageModel(AbstractLanguageModel):
                     num_return_sequences=1,
                     no_repeat_ngram_size=3,
                     repetition_penalty=1.2,
-                    early_stopping=False,
-                    eos_token_id=self.tokenizer.eos_token_id,
-                    pad_token_id=self.tokenizer.pad_token_id,
+                    early_stopping=False
                 )
             
-            text = self.tokenizer.decode(output[0], skip_special_tokens=True)
+            # Decode the generated tokens, ignoring the input
+            generated_text = self.tokenizer.decode(output[0][input_ids.shape[1]:], skip_special_tokens=True)
             
-            return text
-        except RuntimeError as e:
-            if "CUDA out of memory" in str(e):
-                print("CUDA out of memory. Attempting to free cache and retry...")
-                torch.cuda.empty_cache()
-                # Retry generation with reduced parameters
-                return self.generate_response(input_text, temperature, top_p, max(50, max_new_tokens // 2))
-            else:
-                print(f"CUDA error: {str(e)}. Falling back to CPU.")
-                self.device = torch.device("cpu")
-                self.model = self.model.to(self.device)
-                return self.generate_response(input_text, temperature, top_p, max_new_tokens)
+            return generated_text
         except Exception as e:
             print(f"Error in generate_response: {str(e)}")
             print(traceback.format_exc())
             return "An error occurred while generating the response. Please try again."
 
+    def generate_dialogue_continuation(self, context: str, previous_input: str, temperature: float, top_p: float, max_new_tokens: int, min_new_tokens: int) -> str:
+        try:
+            # Prepare input for dialogue continuation
+            formatted_input = f"Continue the following conversation:\nContext: {context}\nHuman: {previous_input}\nAI:"
+
+            # Tokenize formatted input
+            input_ids = self.tokenizer(formatted_input, return_tensors="pt").input_ids.to(self.device)
+            
+            # Generate dialogue continuation
+            with torch.no_grad():
+                output = self.model.generate(
+                    input_ids,
+                    max_length=input_ids.shape[1] + max_new_tokens,
+                    min_length=input_ids.shape[1] + min_new_tokens,
+                    temperature=temperature,
+                    top_p=top_p,
+                    do_sample=True,
+                    num_return_sequences=1,
+                    no_repeat_ngram_size=3,
+                    repetition_penalty=1.2,
+                    early_stopping=False
+                )
+            
+            # Decode the generated tokens, ignoring the input
+            generated_text = self.tokenizer.decode(output[0][input_ids.shape[1]:], skip_special_tokens=True)
+            
+            return generated_text
+        except Exception as e:
+            print(f"Error in generate_dialogue_continuation: {str(e)}")
+            print(traceback.format_exc())
+            return "An error occurred while generating the dialogue continuation. Please try again."
+    def format_input_with_context(self, input_text: str, context: str) -> str:
+        if context:
+            return f"Given the previous interaction: {context}\n\nRespond to: {input_text}"
+        else:
+            return f"Respond to: {input_text}"
+
     def fine_tune(self, input_text: str, target_text: str):
         try:
-            # Only fine-tune if the target_text is not an error message
             if "An error occurred" not in target_text and len(target_text.split()) > 5:
-                # Tokenize input and target
                 inputs = self.tokenizer(input_text, return_tensors="pt", max_length=512, truncation=True, padding="max_length").to(self.device)
                 targets = self.tokenizer(target_text, return_tensors="pt", max_length=512, truncation=True, padding="max_length").to(self.device)
 
-                # Forward pass and calculate loss
                 outputs = self.model(**inputs, labels=targets.input_ids)
                 loss = outputs.loss
         

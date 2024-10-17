@@ -17,7 +17,7 @@ import json
 import argparse
 import os
 
-DECREASE_RATE = 0.5
+DECREASE_RATE = 0.9
 
 class BidirectionalQADataset(Dataset):
     def __init__(self, data, tokenizer, model_type, max_length=128):

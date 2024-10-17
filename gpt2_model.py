@@ -2,7 +2,6 @@ import os
 import torch
 from transformers import GPT2LMHeadModel, GPT2Tokenizer
 from abstract_model import AbstractLanguageModel
-from text_analysis import TextAnalyzer
 import traceback
 
 class GPT2LanguageModel(AbstractLanguageModel):
@@ -31,10 +30,9 @@ class GPT2LanguageModel(AbstractLanguageModel):
 
     def generate_response(self, input_text: str, temperature: float = 0.7, top_p: float = 0.9, max_new_tokens: int = 100) -> str:
         try:
-            # Tokenize input text
+            #Tokenize input text
             input_ids = self.tokenizer.encode(input_text, return_tensors="pt").to(self.device)
             attention_mask = torch.ones(input_ids.shape, dtype=torch.long, device=self.device)
-            
             # Generate response
             with torch.no_grad():
                 output = self.model.generate(
@@ -50,13 +48,9 @@ class GPT2LanguageModel(AbstractLanguageModel):
                     pad_token_id=self.tokenizer.eos_token_id
                 )
             
-            generated_text = self.tokenizer.decode(output[0], skip_special_tokens=True)
-            new_text = generated_text[len(input_text):].strip()
+            text = self.tokenizer.decode(output[0], skip_special_tokens=True)
             
-            if not new_text:
-                new_text = "I'm sorry, but I couldn't generate a meaningful response. Could you please rephrase your input?"
-            
-            return new_text
+            return text
         except RuntimeError as e:
             if "CUDA out of memory" in str(e):
                 print("CUDA out of memory. Attempting to free cache and retry...")

@@ -26,7 +26,7 @@ class T5LanguageModel(AbstractLanguageModel):
             print(f"Error initializing T5 model: {str(e)}")
             print(traceback.format_exc())
 
-    def generate_response(self, input_text: str, temperature: float = 0.8, top_p: float = 0.9, max_new_tokens: int = 100) -> str:
+    def generate_response(self, input_text: str, temperature: float = 0.7, top_p: float = 0.9, max_new_tokens: int = 200, min_new_tokens: int = 100) -> str:
         try:
             # Tokenize input text
             input_ids = self.tokenizer.encode(input_text, return_tensors="pt", add_special_tokens=True).to(self.device)
@@ -36,26 +36,22 @@ class T5LanguageModel(AbstractLanguageModel):
                 outputs = self.model.generate(
                     input_ids,
                     max_length=input_ids.shape[1] + max_new_tokens,
-                    min_length=input_ids.shape[1] + 20,  # Ensure some new tokens are generated
+                    min_length=input_ids.shape[1] + min_new_tokens,
                     temperature=temperature,
                     top_p=top_p,
                     do_sample=True,
                     num_return_sequences=1,
-                    no_repeat_ngram_size=2,
+                    no_repeat_ngram_size=3,
                     repetition_penalty=1.2,
                     pad_token_id=self.tokenizer.pad_token_id,
                     eos_token_id=self.tokenizer.eos_token_id,
-                    early_stopping=True,
+                    early_stopping=False,
                 )
             
             # Decode the generated tokens, ignoring the input
             generated_text = self.tokenizer.decode(outputs[0][input_ids.shape[1]:], skip_special_tokens=True)
             
-            # If the generated text is too short or empty, try again with different parameters
-            if len(generated_text.split()) < 5:
-                return self.generate_response(input_text, temperature=1.0, top_p=0.95, max_new_tokens=max_new_tokens + 50)
-            
-            return generated_text.strip()
+            return generated_text
         except RuntimeError as e:
             if "CUDA out of memory" in str(e):
                 print("CUDA out of memory. Attempting to free cache and retry...")

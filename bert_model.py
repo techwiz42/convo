@@ -51,9 +51,6 @@ class BERTLanguageModel(AbstractLanguageModel):
             generated_text = self.tokenizer.decode(input_ids[0], skip_special_tokens=True)
             new_text = generated_text[len(input_text):].strip()
             
-            if not new_text:
-                new_text = "I'm sorry, but I couldn't generate a meaningful response. Could you please rephrase your input?"
-            
             return new_text
         except RuntimeError as e:
             if "CUDA out of memory" in str(e):

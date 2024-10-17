@@ -35,13 +35,13 @@ class AsyncEnhancedMultiUserQuestionAnswerCLI:
         relevant_knowledge = await asyncio.to_thread(knowledge_base.get_relevant_knowledge, user_input)
         context = " ".join(relevant_knowledge)
 
-        input_text = f"Given the context: {context}\n\nPlease provide a response to the following: {user_input}\n\nResponse:"
-
+        #input_text = f"Given the context: {context}\n\nPlease provide a response to the following: {user_input}\n\nResponse:"
+        input_text = user_input
         # Generate multiple responses with different parameters
         generation_params = [
-            {"temperature": 0.9, "top_p": 0.9, "max_length": 100},
-            {"temperature": 1.0, "top_p": 1.0, "max_length": 150},
-            {"temperature": 0.7, "top_p": 0.8, "max_length": 200}
+            {"temperature": 0.9, "top_p": 0.9, "max_new_tokens": 100},
+            {"temperature": 1.0, "top_p": 1.0, "max_new_tokens": 150},
+            {"temperature": 0.7, "top_p": 0.8, "max_new_tokens": 200}
         ]
 
         async def generate_response(params):
@@ -60,10 +60,6 @@ class AsyncEnhancedMultiUserQuestionAnswerCLI:
         tasks = [generate_response(params) for params in generation_params]
         responses = await asyncio.gather(*tasks)
         responses = [r for r in responses if r is not None]
-
-        if not responses:
-            return "I'm sorry, I couldn't generate a response. Please try again with a different input."
-        
         selected_response = max(responses, key=lambda x: x['score'])
         selected_response = selected_response.get("response")
 

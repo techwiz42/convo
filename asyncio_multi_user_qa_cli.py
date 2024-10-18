@@ -60,6 +60,8 @@ class AsyncEnhancedMultiUserQuestionAnswerCLI:
         tasks = [generate_response(params) for params in generation_params]
         responses = await asyncio.gather(*tasks)
         responses = [r for r in responses if r is not None]
+        for r in responses:
+            print(f"RESPONSE: {r}\n\n")
         selected_response = max(responses, key=lambda x: x['score'])
         selected_response = selected_response.get("response")
 
@@ -73,6 +75,7 @@ class AsyncEnhancedMultiUserQuestionAnswerCLI:
             print(f"Error during knowledge base update: {str(e)}")
 
         return selected_response
+
     def prepare_context(self, user_history: List[str], relevant_knowledge: List[str]) -> str:
         # Combine recent user history and relevant knowledge
         recent_history = user_history[-self.max_context_length * 2:]  # Get last n interactions

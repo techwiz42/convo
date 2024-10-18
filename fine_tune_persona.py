@@ -83,8 +83,8 @@ def load_personachat_data(file_path):
     return conversations
 
 def train(model, train_dataloader, val_dataloader, device, args):
-    optimizer = AdamW(model.parameters(), lr=args.learning_rate)
-    total_steps = len(train_dataloader) * args.num_epochs
+    optimizer = torch.optim.AdamW(model.parameters(), lr=args.learning_rate)
+    total_steps = len(train_dataloader) * args.num_epochs // args.gradient_accumulation_steps
     scheduler = get_linear_schedule_with_warmup(optimizer, num_warmup_steps=0, num_training_steps=total_steps)
     
     for epoch in range(args.num_epochs):
@@ -99,22 +99,25 @@ def train(model, train_dataloader, val_dataloader, device, args):
             
             outputs = model(input_ids=input_ids, attention_mask=attention_mask, labels=labels)
             loss = outputs.loss
-            total_loss += loss.item()
-            
+            loss = loss / args.gradient_accumulation_steps  # Normalize loss
             loss.backward()
-            torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
-            optimizer.step()
-            scheduler.step()
-            optimizer.zero_grad()
+            
+            total_loss += loss.item() * args.gradient_accumulation_steps  # De-normalize for logging
+            
+            if (step + 1) % args.gradient_accumulation_steps == 0 or step == len(train_dataloader) - 1:
+                torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+                optimizer.step()
+                scheduler.step()
+                optimizer.zero_grad()
+            
             if (step + 1) % 100 == 0 or (step + 1) == len(train_dataloader):
                 progress_bar.update(100 if step != len(train_dataloader) - 1 else len(train_dataloader) % 100)
-                progress_bar.set_postfix({'loss': total_loss / (step + 1)})            
+                progress_bar.set_postfix({'loss': total_loss / (step + 1)})
         
         progress_bar.close()
         
         avg_train_loss = total_loss / len(train_dataloader)
-        print(f"Epoch {epoch+1}/{args.num_epochs} completed. Average training loss: {avg_train_loss:.4f}")
-        
+        print(f"Epoch {epoch+1}/{args.num_epochs} completed. Average training loss: {avg_train_loss:.4f}") 
         # Validation
         model.eval()
         total_val_loss = 0
@@ -145,6 +148,7 @@ def main():
     parser.add_argument("--val_data", type=str, required=True, help="Path to the validation data TXT file")
     parser.add_argument("--num_epochs", type=int, default=3, help="Number of training epochs")
     parser.add_argument("--batch_size", type=int, default=4, help="Batch size for training")
+    parser.add_argument("--gradient_accumulation_steps", type=int, default=1, help="Number of updates steps to accumulate before performing a backward/update pass")
     parser.add_argument("--learning_rate", type=float, default=5e-5, help="Learning rate for optimizer")
     parser.add_argument("--output_dir", type=str, default="./models/flan-t5-personachat", help="Directory to save the fine-tuned model")
     parser.add_argument("--max_length", type=int, default=512, help="Maximum sequence length")
@@ -179,3 +183,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

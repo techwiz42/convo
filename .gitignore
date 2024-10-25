@@ -1,9 +1,10 @@
 __pycache__/
 .idea/
 .DS_Store
-models/
-data/
-personachat/
-nltk_data/
+backend/models/
+backend/data/
+backend/personachat/
+backend/nltk_data/
+frontend/.env
 nohup.out
 command

@@ -1,0 +1,15 @@
+2024-10-23 10:35:14,939 - api_server - INFO - Starting server with hostname: queequeg, IP: 127.0.1.1
+2024-10-23 10:35:14,943 - api_server - INFO - Starting up server...
+2024-10-23 10:35:14,944 - api_server - INFO - NLTK data verified
+2024-10-23 10:35:14,944 - api_server - INFO - Initializing model flan-t5 from ./models
+2024-10-23 10:35:15,913 - api_server - INFO - Model initialized successfully
+2024-10-23 10:37:41,075 - api_server - INFO - Starting server with hostname: queequeg.local, IP: 192.168.1.191
+2024-10-23 10:37:41,080 - api_server - INFO - Starting up server...
+2024-10-23 10:37:41,080 - api_server - INFO - NLTK data verified
+2024-10-23 10:37:41,080 - api_server - INFO - Initializing model flan-t5 from ./models
+2024-10-23 10:37:42,031 - api_server - INFO - Model initialized successfully
+2024-10-23 10:43:19,955 - api_server - INFO - Starting server with hostname: queequeg.local, IP: 192.168.1.191
+2024-10-23 10:43:19,960 - api_server - INFO - Starting up server...
+2024-10-23 10:43:19,960 - api_server - INFO - NLTK data verified
+2024-10-23 10:43:19,961 - api_server - INFO - Initializing model flan-t5 from ./models
+2024-10-23 10:43:20,900 - api_server - INFO - Model initialized successfully

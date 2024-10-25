@@ -3,6 +3,9 @@ import torch
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 from abstract_model import AbstractLanguageModel
 import traceback
+import nltk
+from nltk.tokenize import word_tokenize, sent_tokenize
+from nltk import pos_tag
 
 class FLANT5LanguageModel(AbstractLanguageModel):
     def __init__(self, model_type: str, model_path: str):
@@ -24,8 +27,104 @@ class FLANT5LanguageModel(AbstractLanguageModel):
             print(f"Local model not found at {self.model_path}. Loading default FLAN-T5 model.")
             self.model = AutoModelForSeq2SeqLM.from_pretrained("google/flan-t5-base").to(self.device)
             self.tokenizer = AutoTokenizer.from_pretrained("google/flan-t5-base")
+        
+        # Ensure required NLTK data is downloaded
+        try:
+            nltk.data.find('tokenizers/punkt')
+            nltk.data.find('taggers/averaged_perceptron_tagger')
+        except LookupError:
+            nltk.download('punkt')
+            nltk.download('averaged_perceptron_tagger')
+    
+    def is_question(self, text: str) -> bool:
+        try:
+            # First check for simple question mark
+            if "?" in text:
+                return True
+            
+            # Tokenize and get POS tags
+            tokens = word_tokenize(text)
+            pos_tags = pos_tag(tokens)
+            
+            # Check if sentence starts with WH-words or auxiliary verbs
+            if pos_tags:
+                first_tag = pos_tags[0][1]
+                first_word = pos_tags[0][0].lower()
+                
+                # WH-words
+                if first_tag.startswith('W'):
+                    return True
+                
+                # Auxiliary verbs at the start
+                aux_verbs = {'is', 'are', 'was', 'were', 'do', 'does', 'did',
+                           'have', 'has', 'had', 'can', 'could', 'will', 'would',
+                           'shall', 'should', 'may', 'might', 'must'}
+                
+                if first_word in aux_verbs:
+                    # Check if subject follows the auxiliary verb
+                    if len(pos_tags) > 1 and pos_tags[1][1].startswith(('NN', 'PRP')):
+                        return True
+            
+            return False
+            
+        except Exception as e:
+            print(f"Error in is_question: {str(e)}")
+            return "?" in text  # Fallback to simple check if NLTK fails
 
     def generate_response(self, input_text: str, context: str = "", previous_input: str = "", temperature: float = 0.7, top_p: float = 0.9, max_new_tokens: int = 200, min_new_tokens: int = 100) -> str:
+        try:
+            # Use NLTK to determine if input is a question
+            is_question = self.is_question(input_text)
+
+            if is_question:
+                # If input is a question, generate a statement
+                formatted_input = f"Instruction: Convert this question into a statement: {input_text}"
+            else:
+                # If input is a statement, generate a question
+                formatted_input = f"Instruction: Generate a relevant question about: {input_text}"
+
+            # Add context if provided
+            if context:
+                formatted_input = f"Context: {context} {formatted_input}"
+            if previous_input:
+                formatted_input = f"Previous input: {previous_input} {formatted_input}"
+
+            # Tokenize formatted input
+            input_ids = self.tokenizer(formatted_input, return_tensors="pt").input_ids.to(self.device)
+            
+            # Generate response
+            with torch.no_grad():
+                output = self.model.generate(
+                    input_ids,
+                    max_length=input_ids.shape[1] + max_new_tokens,
+                    min_length=input_ids.shape[1] + min_new_tokens,
+                    temperature=temperature,
+                    top_p=top_p,
+                    do_sample=True,
+                    num_return_sequences=1,
+                    no_repeat_ngram_size=3,
+                    repetition_penalty=1.2,
+                    early_stopping=False
+                )
+            
+            # Decode the generated tokens, ignoring the input
+            generated_text = self.tokenizer.decode(output[0][input_ids.shape[1]:], skip_special_tokens=True)
+            
+            # Ensure the response ends with appropriate punctuation
+            if is_question:
+                if not generated_text.rstrip().endswith(('.', '!', '...')):
+                    generated_text = generated_text.rstrip() + '.'
+            else:
+                if not generated_text.rstrip().endswith('?'):
+                    generated_text = generated_text.rstrip() + '?'
+            
+            return generated_text
+
+        except Exception as e:
+            print(f"Error in generate_response: {str(e)}")
+            print(traceback.format_exc())
+
+    def generate_response_OLD(self, input_text: str, context: str = "", previous_input: str = "", temperature: float = 0.7, top_p: float = 0.9, max_new_tokens: int = 200, min_new_tokens: int = 100) -> str:
         try:
             # Determine the type of response to generate
             if context and previous_input:

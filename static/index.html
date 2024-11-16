@@ -54,6 +54,7 @@
             background-color: white;
             border-radius: 8px;
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 100px;  /* Make room for footer */
         }
 
         #login-container h2 {
@@ -70,6 +71,7 @@
             border-radius: 8px;
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
             display: none;
+            margin-bottom: 100px;  /* Make room for footer */
         }
 
         #messages {
@@ -97,6 +99,12 @@
             border: 1px solid #ddd;
             border-radius: 4px;
             box-sizing: border-box;
+        }
+
+        .input-hint {
+            font-size: 12px;
+            color: #666;
+            margin-top: 4px;
         }
 
         #input-container {
@@ -207,6 +215,29 @@
             animation: rotate 1s linear infinite;
             margin-right: 8px;
         }
+
+        .footer {
+            text-align: center;
+            padding: 20px;
+            font-size: 14px;
+            color: #666;
+            position: fixed;
+            bottom: 0;
+            width: 100%;
+            background-color: white;
+            border-top: 1px solid #eee;
+            left: 0;
+        }
+
+        .footer a {
+            color: #2196F3;
+            text-decoration: none;
+            margin: 0 10px;
+        }
+
+        .footer a:hover {
+            text-decoration: underline;
+        }
     </style>
 </head>
 <body>
@@ -222,13 +253,10 @@
         <h2>Login to Swarm Chat</h2>
         <div class="input-group">
             <label for="username">Username</label>
-            <input type="text" id="username" required>
+            <input type="text" id="username" required placeholder="Enter any name">
+            <div class="input-hint">No account required - just enter any name to start chatting!</div>
         </div>
-        <div class="input-group">
-            <label for="password">Password</label>
-            <input type="password" id="password" required>
-        </div>
-        <button onclick="login()" class="button">Login</button>
+        <button onclick="login()" class="button">Start Chatting</button>
     </div>
 
     <div id="chat-container">
@@ -237,6 +265,11 @@
             <input type="text" id="message-input" placeholder="Type a message...">
             <button id="send-button" class="button" onclick="sendMessage()">Send</button>
         </div>
+    </div>
+
+    <div class="footer">
+        <a href="https://github.com/techwiz42/convo" target="_blank">View on GitHub</a> |
+        <a href="mailto:peter.sisk2@gmail.com">Contact Developer</a>
     </div>
 
     <script>
@@ -301,10 +334,9 @@
         
         async function login() {
             const username = document.getElementById('username').value;
-            const password = document.getElementById('password').value;
 
-            if (!username || !password) {
-                alert('Please enter both username and password');
+            if (!username) {
+                alert('Please enter a username');
                 return;
             }
 
@@ -312,7 +344,7 @@
                 const response = await fetch('/login', {
                     method: 'POST',
                     headers: {
-                        'Authorization': 'Basic ' + btoa(username + ':' + password)
+                        'Authorization': 'Basic ' + btoa(username + ':dummy')
                     }
                 });
 
@@ -431,8 +463,8 @@
             }
         });
 
-        // Add password field Enter key support
-        document.getElementById('password').addEventListener('keypress', function(event) {
+        // Add username field Enter key support
+        document.getElementById('username').addEventListener('keypress', function(event) {
             if (event.key === 'Enter') {
                 event.preventDefault();
                 login();

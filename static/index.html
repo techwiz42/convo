@@ -137,6 +137,21 @@
             border-radius: 5px;
             max-width: 80%;
             word-wrap: break-word;
+            line-height: 1.5;
+        }
+
+        .message ul {
+            margin: 10px 0;
+            padding-left: 20px;
+        }
+        
+        .message li {
+            margin: 5px 0;
+            color: #444;
+        }
+
+        .message strong {
+            color: #2196F3;
         }
 
         .user-message {
@@ -229,6 +244,27 @@
         let messagesDiv = document.getElementById('messages');
         let sendButton = document.getElementById('send-button');
         let exitButton = document.getElementById('exit-button');
+
+        async function loadInitialMessage() {
+            const welcomeDiv = document.createElement('div');
+            welcomeDiv.className = 'message assistant-message';
+            welcomeDiv.innerHTML = `
+                <strong>Welcome to Swarm Chat!</strong><br><br>
+                This is a unique chat experience where you'll interact with a variety of AI personalities, including:
+                <ul>
+                    <li>Ernest Hemingway - Known for direct, terse prose</li>
+                    <li>Thomas Pynchon - Complex, postmodern style</li>
+                    <li>Emily Dickinson - Poetic and contemplative</li>
+                    <li>Dale Carnegie - Motivational and positive</li>
+                    <li>A Freudian Psychoanalyst - Deep psychological insights</li>
+                    <li>A 1920s Flapper - Jazz Age enthusiasm</li>
+                </ul>
+                Each response will come from a randomly selected personality, making every conversation unique and engaging.<br><br>
+                Please feel free to start the conversation with any topic!
+            `;
+            messagesDiv.appendChild(welcomeDiv);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
         
         function createTypingIndicator() {
             const div = document.createElement('div');
@@ -298,6 +334,9 @@
 
                 // Load initial history
                 await loadHistory();
+                if (messagesDiv.children.length === 0) {
+                    await loadInitialMessage();
+                }
             } catch (error) {
                 console.error('Login error:', error);
                 alert('Login failed. Please try again.');

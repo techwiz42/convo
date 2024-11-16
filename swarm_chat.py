@@ -19,7 +19,7 @@ from datetime import datetime
 import random
 import signal
 
-# Configure file logging only
+# Configure logging
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -37,7 +37,6 @@ uvicorn_logger.setLevel(logging.WARNING)
 
 app = FastAPI()
 security = HTTPBasic()
-server_should_exit = False
 
 class UserSession:
     def __init__(self, username: str):
@@ -77,38 +76,43 @@ class SwarmChatManager:
 
     @asynccontextmanager
     async def get_session_safe(self, token: str) -> Optional[UserSession]:
+        """Safely get a session with proper locking"""
+        if not token:
+            logger.warning("No token provided")
+            yield None
+            return
+
         try:
-            if not token:
-                yield None
-                return
+            username = None
+            session = None
 
             async with self.tokens_lock:
                 username = self.tokens.get(token)
                 if not username:
+                    logger.warning(f"Invalid token attempted: {token[:8]}...")
                     yield None
                     return
 
             async with self.sessions_lock:
                 session = self.sessions.get(username)
                 if not session:
+                    logger.warning(f"No session found for username: {username}")
                     yield None
                     return
 
             async with session.lock:
+                logger.debug(f"Session acquired for user: {username}")
                 try:
                     yield session
-                except Exception as e:
-                    logger.error(f"Error during session use: {str(e)}")
-                    raise
                 finally:
                     logger.debug(f"Session released for user: {username}")
 
         except Exception as e:
             logger.error(f"Error in get_session_safe: {str(e)}")
             yield None
-            return
 
     async def create_session(self, username: str) -> str:
+        """Create a new session with proper locking"""
         try:
             token = secrets.token_urlsafe(32)
             
@@ -128,25 +132,26 @@ class SwarmChatManager:
             raise HTTPException(status_code=500, detail="Error creating session")
 
     async def process_message(self, token: str, content: str) -> Optional[str]:
+        """Process a message and return the response"""
         if not token:
             raise HTTPException(status_code=401, detail="Not authenticated")
 
-        async with self.get_session_safe(token) as session:
-            if not session:
-                raise HTTPException(status_code=401, detail="Invalid session")
+        try:
+            async with self.get_session_safe(token) as session:
+                if not session:
+                    raise HTTPException(status_code=401, detail="Invalid session")
 
-            try:
                 session.messages.append({
                     "role": "user",
                     "content": content
                 })
 
                 if not session.first_message_handled:
-                    # First message goes to triage agent
+                    logger.info("Processing first message with triage agent")
                     session.first_message_handled = True
                 else:
-                    # All subsequent messages go to random agents
                     session.agent = session.select_random_agent()
+                    logger.info(f"Using agent: {session.agent.name}")
 
                 response = await asyncio.to_thread(
                     session.client.run,
@@ -162,29 +167,34 @@ class SwarmChatManager:
 
                 return None
 
-            except Exception as e:
-                logger.error(f"Message processing error: {str(e)}", exc_info=True)
-                raise HTTPException(
-                    status_code=500, 
-                    detail=f"Error processing message: {str(e)}"
-                )
+        except Exception as e:
+            logger.error(f"Message processing error: {str(e)}", exc_info=True)
+            raise HTTPException(
+                status_code=500, 
+                detail=f"Error processing message: {str(e)}"
+            )
 
     async def get_user_messages(self, token: str) -> List[dict]:
+        """Safely get user messages with proper locking"""
         if not token:
+            logger.warning("No token provided for message retrieval")
             raise HTTPException(status_code=401, detail="Not authenticated")
             
-        async with self.get_session_safe(token) as session:
-            if not session:
-                raise HTTPException(status_code=401, detail="Invalid session")
-            
-            try:
+        try:
+            async with self.get_session_safe(token) as session:
+                if not session:
+                    logger.warning(f"Invalid session for token: {token[:8]}...")
+                    raise HTTPException(status_code=401, detail="Invalid session")
+                
+                logger.debug(f"Retrieving messages for session")
                 return session.messages.copy()
-            except Exception as e:
-                logger.error(f"Message retrieval error: {str(e)}")
-                raise HTTPException(
-                    status_code=500,
-                    detail=f"Error retrieving messages: {str(e)}"
-                )
+
+        except Exception as e:
+            logger.error(f"Message retrieval error: {str(e)}")
+            raise HTTPException(
+                status_code=500,
+                detail=f"Error retrieving messages: {str(e)}"
+            )
 
 chat_manager = SwarmChatManager()
 
@@ -203,6 +213,7 @@ async def get_chat_page():
 @app.post("/login")
 async def login(credentials: HTTPBasicCredentials = Depends(security)):
     try:
+        logger.info(f"Login attempt: {credentials.username}")
         token = await chat_manager.create_session(credentials.username)
         return {"token": token, "username": credentials.username}
     except Exception as e:
@@ -214,14 +225,17 @@ async def send_message(message: ChatMessage, token: str = Cookie(None)):
     if not token:
         raise HTTPException(status_code=401, detail="Not authenticated")
     
+    logger.info(f"Processing chat message")
     response = await chat_manager.process_message(token, message.content)
     return {"response": response}
 
 @app.get("/history")
 async def get_history(token: str = Cookie(None)):
     if not token:
+        logger.warning("History request without token")
         raise HTTPException(status_code=401, detail="Not authenticated")
     
+    logger.debug(f"Retrieving chat history")
     messages = await chat_manager.get_user_messages(token)
     return {"messages": messages}
 

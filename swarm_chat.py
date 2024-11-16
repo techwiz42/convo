@@ -19,28 +19,25 @@ from datetime import datetime
 import random
 import signal
 
-# Configure logging
+# Configure file logging only
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.StreamHandler(sys.stdout),
         logging.FileHandler(f'swarm_chat_{datetime.now().strftime("%Y%m%d")}.log')
     ]
 )
 logger = logging.getLogger(__name__)
 
+# Set uvicorn access logger to only show startup and HTTP methods
+uvicorn_logger = logging.getLogger("uvicorn.access")
+uvicorn_logger.handlers = []
+uvicorn_logger.addHandler(logging.StreamHandler())
+uvicorn_logger.setLevel(logging.WARNING)
+
 app = FastAPI()
 security = HTTPBasic()
 server_should_exit = False
-
-def signal_handler(signum, frame):
-    global server_should_exit
-    logger.info("Shutdown signal received. Cleaning up...")
-    server_should_exit = True
-    sys.exit(0)
-
-signal.signal(signal.SIGINT, signal_handler)
 
 class UserSession:
     def __init__(self, username: str):
@@ -49,12 +46,12 @@ class UserSession:
         self.client = Swarm()
         self.agent = triage_agent
         self.lock = asyncio.Lock()
-        self.is_first_message = True
+        self.first_message_handled = False
         logger.info(f"New session created for user: {username}")
 
-    def get_random_agent_transfer(self):
-        """Get a random agent transfer function"""
-        transfer_functions = [
+    def select_random_agent(self):
+        """Select and instantiate a random agent"""
+        agents = [
             transfer_to_hemmingway,
             transfer_to_pynchon,
             transfer_to_dickinson,
@@ -62,9 +59,10 @@ class UserSession:
             transfer_to_shrink,
             transfer_to_flapper
         ]
-        selected = random.choice(transfer_functions)
-        logger.info(f"Selected random agent transfer: {selected.__name__}")
-        return selected()  # Return the agent directly, not the transfer function
+        selected_func = random.choice(agents)
+        new_agent = selected_func()
+        logger.info(f"Selected random agent: {new_agent.name}")
+        return new_agent
 
 class ChatMessage(BaseModel):
     content: str
@@ -72,36 +70,31 @@ class ChatMessage(BaseModel):
 class SwarmChatManager:
     def __init__(self):
         self.sessions: Dict[str, UserSession] = {}
-        self.tokens: Dict[str, str] = {}  # token -> username mapping
+        self.tokens: Dict[str, str] = {}
         self.sessions_lock = asyncio.Lock()
         self.tokens_lock = asyncio.Lock()
         logger.info("SwarmChatManager initialized")
 
     @asynccontextmanager
     async def get_session_safe(self, token: str) -> Optional[UserSession]:
-        """Safely get a session with proper locking"""
         try:
             if not token:
-                logger.warning("No token provided")
                 yield None
                 return
 
             async with self.tokens_lock:
                 username = self.tokens.get(token)
                 if not username:
-                    logger.warning(f"Invalid token attempted: {token[:8]}...")
                     yield None
                     return
 
             async with self.sessions_lock:
                 session = self.sessions.get(username)
                 if not session:
-                    logger.warning(f"No session found for username: {username}")
                     yield None
                     return
 
             async with session.lock:
-                logger.debug(f"Session acquired for user: {username}")
                 try:
                     yield session
                 except Exception as e:
@@ -111,25 +104,22 @@ class SwarmChatManager:
                     logger.debug(f"Session released for user: {username}")
 
         except Exception as e:
-            logger.warning(f"Error in get_session_safe: {str(e)}")
+            logger.error(f"Error in get_session_safe: {str(e)}")
             yield None
             return
 
     async def create_session(self, username: str) -> str:
-        """Create a new session with proper locking"""
         try:
             token = secrets.token_urlsafe(32)
             
             async with self.sessions_lock:
                 if username not in self.sessions:
                     self.sessions[username] = UserSession(username)
-                    logger.info(f"Created new session for user: {username}")
                 else:
-                    logger.info(f"Retrieved existing session for user: {username}")
+                    self.sessions[username] = UserSession(username)  # Reset session
             
             async with self.tokens_lock:
                 self.tokens[token] = username
-                logger.debug(f"Token mapped for user: {username}")
             
             return token
 
@@ -143,24 +133,20 @@ class SwarmChatManager:
 
         async with self.get_session_safe(token) as session:
             if not session:
-                logger.warning(f"Invalid session for token: {token[:8]}...")
                 raise HTTPException(status_code=401, detail="Invalid session")
 
             try:
-                logger.info(f"Processing message for user {session.username}")
                 session.messages.append({
                     "role": "user",
                     "content": content
                 })
 
-                # Handle agent selection
-                if session.is_first_message:
-                    logger.info("Processing first message with triage agent")
-                    session.is_first_message = False
+                if not session.first_message_handled:
+                    # First message goes to triage agent
+                    session.first_message_handled = True
                 else:
-                    # Get a new random agent for this message
-                    session.agent = session.get_random_agent_transfer()
-                    logger.info(f"Switched to agent: {session.agent.name}")
+                    # All subsequent messages go to random agents
+                    session.agent = session.select_random_agent()
 
                 response = await asyncio.to_thread(
                     session.client.run,
@@ -172,10 +158,8 @@ class SwarmChatManager:
                     latest_message = response.messages[-1]
                     if latest_message.get("role") == "assistant":
                         session.messages = response.messages
-                        logger.info("Message history updated")
                         return latest_message.get("content")
 
-                logger.warning("No valid assistant message found in response")
                 return None
 
             except Exception as e:
@@ -186,18 +170,14 @@ class SwarmChatManager:
                 )
 
     async def get_user_messages(self, token: str) -> List[dict]:
-        """Safely get user messages with proper locking"""
         if not token:
-            logger.warning("No token provided for message retrieval")
             raise HTTPException(status_code=401, detail="Not authenticated")
             
         async with self.get_session_safe(token) as session:
             if not session:
-                logger.warning(f"Invalid session for token: {token[:8]}...")
                 raise HTTPException(status_code=401, detail="Invalid session")
             
             try:
-                logger.debug(f"Retrieving messages for user: {session.username}")
                 return session.messages.copy()
             except Exception as e:
                 logger.error(f"Message retrieval error: {str(e)}")
@@ -223,7 +203,6 @@ async def get_chat_page():
 @app.post("/login")
 async def login(credentials: HTTPBasicCredentials = Depends(security)):
     try:
-        logger.info(f"Login attempt: {credentials.username}")
         token = await chat_manager.create_session(credentials.username)
         return {"token": token, "username": credentials.username}
     except Exception as e:
@@ -233,37 +212,32 @@ async def login(credentials: HTTPBasicCredentials = Depends(security)):
 @app.post("/chat")
 async def send_message(message: ChatMessage, token: str = Cookie(None)):
     if not token:
-        logger.warning("Chat attempt without token")
         raise HTTPException(status_code=401, detail="Not authenticated")
     
-    logger.info(f"Chat message received, token: {token[:8]}...")
     response = await chat_manager.process_message(token, message.content)
     return {"response": response}
 
 @app.get("/history")
 async def get_history(token: str = Cookie(None)):
     if not token:
-        logger.warning("History request without token")
         raise HTTPException(status_code=401, detail="Not authenticated")
     
-    logger.debug(f"History requested, token: {token[:8]}...")
     messages = await chat_manager.get_user_messages(token)
     return {"messages": messages}
 
-@app.post("/quit")
-async def quit_server():
-    logger.info("Quit requested via API")
-    global server_should_exit
-    server_should_exit = True
-    return {"status": "shutting down"}
-
 if __name__ == "__main__":
-    logger.info("Starting Swarm Chat server...")
-    config = uvicorn.Config(app, host="0.0.0.0", port=8000)
+    print("Starting Swarm Chat server...")
+    config = uvicorn.Config(
+        app, 
+        host="0.0.0.0", 
+        port=8000, 
+        log_level="warning",
+        access_log=False
+    )
     server = uvicorn.Server(config)
     try:
         server.run()
     except KeyboardInterrupt:
-        logger.info("Received shutdown signal")
+        print("Server shutting down...")
     finally:
-        logger.info("Server shutdown complete")
+        print("Server shutdown complete")

@@ -1,219 +1,278 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Swarm Chat</title>
     <style>
         body {
             font-family: Arial, sans-serif;
-            max-width: 800px;
-            margin: 0 auto;
+            margin: 0;
             padding: 20px;
+            background-color: #f5f5f5;
         }
-        #chat-container {
-            display: none;
-            height: 500px;
-            border: 1px solid #ccc;
-            border-radius: 5px;
-            padding: 20px;
-        }
-        #messages {
-            height: 400px;
-            overflow-y: auto;
-            margin-bottom: 20px;
+
+        #status-indicator {
             padding: 10px;
-            border: 1px solid #eee;
+            margin: 10px;
+            display: flex;
+            align-items: center;
+            background-color: white;
             border-radius: 5px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            justify-content: space-between;
         }
+
+        .status-left {
+            display: flex;
+            align-items: center;
+        }
+
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin-right: 10px;
+            background-color: #ccc;
+        }
+
+        #exit-button {
+            padding: 5px 15px;
+            background-color: #ff4444;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        #exit-button:hover {
+            background-color: #ff0000;
+        }
+
+        #login-container {
+            max-width: 400px;
+            margin: 100px auto;
+            padding: 30px;
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        #login-container h2 {
+            margin-top: 0;
+            color: #333;
+            margin-bottom: 20px;
+        }
+
+        #chat-container {
+            max-width: 800px;
+            margin: 20px auto;
+            padding: 20px;
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            display: none;
+        }
+
+        #messages {
+            height: 500px;
+            overflow-y: auto;
+            padding: 15px;
+            border: 1px solid #e0e0e0;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+
+        .input-group {
+            margin-bottom: 15px;
+        }
+
+        .input-group label {
+            display: block;
+            margin-bottom: 5px;
+            color: #666;
+        }
+
+        .input-group input {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+
+        #input-container {
+            display: flex;
+            gap: 10px;
+            position: relative;
+        }
+
+        #message-input {
+            flex-grow: 1;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+
+        .button {
+            padding: 10px 20px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+
+        .button:hover {
+            background-color: #45a049;
+        }
+
+        .button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+
         .message {
             margin: 10px 0;
             padding: 10px;
             border-radius: 5px;
+            max-width: 80%;
+            word-wrap: break-word;
         }
+
         .user-message {
             background-color: #e3f2fd;
-            margin-left: 20%;
+            margin-left: auto;
+            text-align: right;
         }
-        .agent-message {
+
+        .assistant-message {
             background-color: #f5f5f5;
-            margin-right: 20%;
+            margin-right: auto;
         }
-        .loading-message {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            background-color: #f5f5f5;
-            margin-right: 20%;
-            animation: pulse 1.5s infinite;
-        }
-        @keyframes pulse {
-            0% { opacity: 0.6; }
+
+        @keyframes typing {
+            0%, 100% { opacity: 0.3; }
             50% { opacity: 1; }
-            100% { opacity: 0.6; }
         }
-        .loading-spinner {
-            width: 20px;
-            height: 20px;
-            border: 3px solid #f3f3f3;
-            border-top: 3px solid #3498db;
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-            display: inline-block;
-        }
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-        #input-container {
-            display: flex;
-            gap: 10px;
-        }
-        #message-input {
-            flex-grow: 1;
-            padding: 10px;
-            border: 1px solid #ccc;
-            border-radius: 5px;
-        }
-        button {
-            padding: 10px 20px;
-            background-color: #2196f3;
-            color: white;
-            border: none;
-            border-radius: 5px;
-            cursor: pointer;
-        }
-        button:hover {
-            background-color: #1976d2;
-        }
-        button:disabled {
-            background-color: #ccc;
-            cursor: not-allowed;
-        }
-        #login-container {
-            text-align: center;
-            margin-top: 100px;
-        }
-        .input-group {
-            margin: 10px 0;
-        }
-        .input-group input {
-            padding: 10px;
-            width: 200px;
-            border: 1px solid #ccc;
-            border-radius: 5px;
-        }
-        #status-indicator {
-            position: fixed;
-            top: 10px;
-            right: 10px;
-            padding: 5px 10px;
-            border-radius: 15px;
-            font-size: 14px;
+
+        .typing-indicator {
             display: flex;
             align-items: center;
             gap: 5px;
+            padding: 10px;
+            background-color: #f5f5f5;
+            border-radius: 5px;
+            margin: 10px 0;
+            max-width: 100px;
         }
-        .status-dot {
+
+        .typing-dot {
             width: 8px;
             height: 8px;
+            background-color: #666;
             border-radius: 50%;
+            animation: typing 1s infinite;
+        }
+
+        .typing-dot:nth-child(2) { animation-delay: 0.2s; }
+        .typing-dot:nth-child(3) { animation-delay: 0.4s; }
+
+        @keyframes rotate {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+
+        .spinner {
             display: inline-block;
-        }
-        .status-connected {
-            background-color: #4caf50;
-            color: #4caf50;
-        }
-        .status-disconnected {
-            background-color: #f44336;
-            color: #f44336;
-        }
-        .status-connecting {
-            background-color: #ff9800;
-            color: #ff9800;
+            width: 12px;
+            height: 12px;
+            border: 2px solid #666;
+            border-top-color: transparent;
+            border-radius: 50%;
+            animation: rotate 1s linear infinite;
+            margin-right: 8px;
         }
     </style>
 </head>
 <body>
     <div id="status-indicator">
-        <span class="status-dot"></span>
-        <span class="status-text">Connecting...</span>
+        <div class="status-left">
+            <div class="status-dot"></div>
+            <span class="status-text">Not Connected</span>
+        </div>
+        <button id="exit-button" style="display: none;">Exit Session</button>
     </div>
 
     <div id="login-container">
         <h2>Login to Swarm Chat</h2>
         <div class="input-group">
-            <input type="text" id="username" placeholder="Username">
+            <label for="username">Username</label>
+            <input type="text" id="username" required>
         </div>
         <div class="input-group">
-            <input type="password" id="password" placeholder="Password">
+            <label for="password">Password</label>
+            <input type="password" id="password" required>
         </div>
-        <button onclick="login()">Login</button>
+        <button onclick="login()" class="button">Login</button>
     </div>
 
     <div id="chat-container">
         <div id="messages"></div>
         <div id="input-container">
-            <input type="text" id="message-input" placeholder="Type your message...">
-            <button id="send-button" onclick="sendMessage()">Send</button>
+            <input type="text" id="message-input" placeholder="Type a message...">
+            <button id="send-button" class="button" onclick="sendMessage()">Send</button>
         </div>
     </div>
 
     <script>
-        let token = '';
-        let isWaitingForResponse = false;
-        let connectionCheckInterval;
-
-        // Connection status management
-        function updateConnectionStatus(status) {
-            const indicator = document.getElementById('status-indicator');
-            const dot = indicator.querySelector('.status-dot');
-            const text = indicator.querySelector('.status-text');
-            
-            dot.className = 'status-dot';
-            switch(status) {
-                case 'connected':
-                    dot.classList.add('status-connected');
-                    text.textContent = 'Connected';
-                    text.style.color = '#4caf50';
-                    break;
-                case 'disconnected':
-                    dot.classList.add('status-disconnected');
-                    text.textContent = 'Disconnected';
-                    text.style.color = '#f44336';
-                    break;
-                case 'connecting':
-                    dot.classList.add('status-connecting');
-                    text.textContent = 'Connecting...';
-                    text.style.color = '#ff9800';
-                    break;
-            }
+        let messageInput = document.getElementById('message-input');
+        let messagesDiv = document.getElementById('messages');
+        let sendButton = document.getElementById('send-button');
+        let exitButton = document.getElementById('exit-button');
+        
+        function createTypingIndicator() {
+            const div = document.createElement('div');
+            div.className = 'typing-indicator';
+            div.innerHTML = `
+                <div class="spinner"></div>
+                <div class="typing-dot"></div>
+                <div class="typing-dot"></div>
+                <div class="typing-dot"></div>
+            `;
+            return div;
         }
 
-        async function checkConnection() {
-            try {
-                const response = await fetch('/');
-                if (response.ok) {
-                    updateConnectionStatus('connected');
-                } else {
-                    updateConnectionStatus('disconnected');
-                }
-            } catch (error) {
-                updateConnectionStatus('disconnected');
-            }
+        function showTypingIndicator() {
+            const indicator = createTypingIndicator();
+            messagesDiv.appendChild(indicator);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+            return indicator;
         }
 
-        // Start connection checking
-        updateConnectionStatus('connecting');
-        checkConnection();
-        connectionCheckInterval = setInterval(checkConnection, 30000); // Check every 30 seconds
-
+        function exitSession() {
+            if (confirm('Are you sure you want to exit the session?')) {
+                document.cookie = 'token=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT;';
+                document.getElementById('login-container').style.display = 'block';
+                document.getElementById('chat-container').style.display = 'none';
+                document.getElementById('exit-button').style.display = 'none';
+                const statusDot = document.querySelector('.status-dot');
+                const statusText = document.querySelector('.status-text');
+                statusDot.style.backgroundColor = '#ccc';
+                statusText.textContent = 'Not Connected';
+                messagesDiv.innerHTML = '';
+            }
+        }
+        
         async function login() {
             const username = document.getElementById('username').value;
             const password = document.getElementById('password').value;
 
+            if (!username || !password) {
+                alert('Please enter both username and password');
+                return;
+            }
+
             try {
-                updateConnectionStatus('connecting');
                 const response = await fetch('/login', {
                     method: 'POST',
                     headers: {
@@ -221,132 +280,134 @@
                     }
                 });
 
-                if (response.ok) {
-                    const data = await response.json();
-                    token = data.token;
-                    document.cookie = `token=${token}`;
-                    
-                    // Switch to chat interface
-                    document.getElementById('login-container').style.display = 'none';
-                    document.getElementById('chat-container').style.display = 'block';
-                    
-                    // Load chat history
-                    loadHistory();
-                    updateConnectionStatus('connected');
-                } else {
-                    alert('Login failed');
-                    updateConnectionStatus('disconnected');
+                if (!response.ok) {
+                    throw new Error(`Login failed: ${response.status}`);
                 }
+
+                const data = await response.json();
+                document.cookie = `token=${data.token}; path=/`;
+                
+                // Update UI
+                document.getElementById('login-container').style.display = 'none';
+                document.getElementById('chat-container').style.display = 'block';
+                document.getElementById('exit-button').style.display = 'block';
+                const statusDot = document.querySelector('.status-dot');
+                const statusText = document.querySelector('.status-text');
+                statusDot.style.backgroundColor = '#00ff00';
+                statusText.textContent = `Connected as ${username}`;
+
+                // Load initial history
+                await loadHistory();
             } catch (error) {
                 console.error('Login error:', error);
-                alert('Login failed');
-                updateConnectionStatus('disconnected');
+                alert('Login failed. Please try again.');
             }
         }
 
-        async function loadHistory() {
-            try {
-                updateConnectionStatus('connecting');
-                const response = await fetch('/history', {
-                    headers: {
-                        'Cookie': `token=${token}`
-                    }
-                });
-                if (response.ok) {
-                    const data = await response.json();
-                    const messagesDiv = document.getElementById('messages');
-                    messagesDiv.innerHTML = '';
-                    
-                    data.messages.forEach(message => {
-                        const messageDiv = document.createElement('div');
-                        messageDiv.className = `message ${message.role === 'user' ? 'user-message' : 'agent-message'}`;
-                        messageDiv.textContent = `${message.sender}: ${message.content}`;
-                        messagesDiv.appendChild(messageDiv);
-                    });
-                    
-                    messagesDiv.scrollTop = messagesDiv.scrollHeight;
-                    updateConnectionStatus('connected');
-                }
-            } catch (error) {
-                console.error('Error loading history:', error);
-                updateConnectionStatus('disconnected');
-            }
-        }
-
-        async function sendMessage() {
-            const input = document.getElementById('message-input');
-            const sendButton = document.getElementById('send-button');
-            const content = input.value.trim();
-            if (!content || isWaitingForResponse) return;
-
-            try {
-                // Disable input and show loading state
-                isWaitingForResponse = true;
-                input.disabled = true;
-                sendButton.disabled = true;
-                
-                // Add user message to display
-                addMessage(content, true);
-                input.value = '';
-
-                // Add loading message
-                const loadingDiv = document.createElement('div');
-                loadingDiv.className = 'message loading-message';
-                loadingDiv.innerHTML = '<div class="loading-spinner"></div><span>Agent is typing...</span>';
-                document.getElementById('messages').appendChild(loadingDiv);
-
-                updateConnectionStatus('connecting');
-                const response = await fetch('/chat', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Cookie': `token=${token}`
-                    },
-                    body: JSON.stringify({ content })
-                });
-
-                // Remove loading message
-                loadingDiv.remove();
-
-                if (response.ok) {
-                    const data = await response.json();
-                    if (data.response) {
-                        addMessage(data.response, false);
-                    }
-                    updateConnectionStatus('connected');
-                }
-            } catch (error) {
-                console.error('Error sending message:', error);
-                alert('Failed to send message');
-                updateConnectionStatus('disconnected');
-            } finally {
-                // Re-enable input
-                isWaitingForResponse = false;
-                input.disabled = false;
-                sendButton.disabled = false;
-                input.focus();
-            }
-        }
-
-        function addMessage(content, isUser) {
-            const messagesDiv = document.getElementById('messages');
+        async function appendMessage(role, content) {
             const messageDiv = document.createElement('div');
-            messageDiv.className = `message ${isUser ? 'user-message' : 'agent-message'}`;
-            messageDiv.textContent = `${isUser ? 'You' : 'Agent'}: ${content}`;
+            messageDiv.className = `message ${role}-message`;
+            messageDiv.textContent = content;
             messagesDiv.appendChild(messageDiv);
             messagesDiv.scrollTop = messagesDiv.scrollHeight;
         }
 
-        // Handle Enter key in message input
-        document.getElementById('message-input').addEventListener('keypress', function(e) {
-            if (e.key === 'Enter' && !isWaitingForResponse) {
+        async function loadHistory() {
+            try {
+                const response = await fetch('/history');
+                if (!response.ok) {
+                    if (response.status === 401) {
+                        document.getElementById('login-container').style.display = 'block';
+                        document.getElementById('chat-container').style.display = 'none';
+                        document.getElementById('exit-button').style.display = 'none';
+                        return;
+                    }
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                const data = await response.json();
+                messagesDiv.innerHTML = '';
+                data.messages.forEach(message => {
+                    appendMessage(message.role, message.content);
+                });
+            } catch (error) {
+                console.error('Error loading history:', error);
+            }
+        }
+
+        function setResponding(isResponding) {
+            messageInput.disabled = isResponding;
+            sendButton.disabled = isResponding;
+        }
+
+        async function sendMessage() {
+            const content = messageInput.value.trim();
+            if (!content) return;
+
+            try {
+                // Disable input and show typing indicator
+                setResponding(true);
+                appendMessage('user', content);
+                messageInput.value = '';
+                
+                const typingIndicator = showTypingIndicator();
+
+                const response = await fetch('/chat', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ content: content })
+                });
+
+                // Remove typing indicator
+                typingIndicator.remove();
+
+                if (!response.ok) {
+                    if (response.status === 401) {
+                        document.getElementById('login-container').style.display = 'block';
+                        document.getElementById('chat-container').style.display = 'none';
+                        document.getElementById('exit-button').style.display = 'none';
+                        return;
+                    }
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const data = await response.json();
+                if (data.response) {
+                    appendMessage('assistant', data.response);
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Error sending message');
+                await loadHistory(); // Reload history in case of error
+            } finally {
+                setResponding(false);
+            }
+        }
+
+        messageInput.addEventListener('keypress', function(event) {
+            if (event.key === 'Enter' && !event.shiftKey && !messageInput.disabled) {
+                event.preventDefault();
                 sendMessage();
             }
         });
 
-        // Cleanup on page unload
-        window.addEventListener('beforeunload', function() {
-            clearInterval(connectionCheckInterval);
+        // Add password field Enter key support
+        document.getElementById('password').addEventListener('keypress', function(event) {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                login();
+            }
+        });
+
+        // Add exit button handler
+        exitButton.addEventListener('click', exitSession);
+
+        // Check login status on load
+        document.addEventListener('DOMContentLoaded', () => {
+            loadHistory().catch(error => {
+                console.error('Initial load error:', error);
+            });
         });
     </script>
 </body>

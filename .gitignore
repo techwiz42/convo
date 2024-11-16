@@ -1,10 +1,6 @@
 __pycache__/
 .idea/
 .DS_Store
-backend/models/
-backend/data/
-backend/personachat/
-backend/nltk_data/
-frontend/.env
 nohup.out
-command
+*.log
+.*.swp

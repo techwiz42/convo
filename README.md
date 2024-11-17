@@ -84,6 +84,18 @@ pytest -v -m performance tests/test_swarm_chat.py
 # Run only security tests
 pytest -v -m security tests/test_swarm_chat.py
 ~~~
+To run all tests in a class or a single test method in a class
+~~~
+# Run all tests in TestMessageHandling class
+pytest tests/test_swarm_chat.py::TestMessageHandling -v
+
+# Run all tests with "MessageHandling" in the name
+pytest -v -k "MessageHandling"
+
+# Run just the test_basic_message test in TestMessageHandling
+pytest tests/test_swarm_chat.py::TestMessageHandling::test_basic_message -v
+~~~
+Omit the -v for less verbose output.
 
 ## Development
 lots to do.

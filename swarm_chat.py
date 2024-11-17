@@ -1,23 +1,26 @@
+import asyncio
+import logging
+import random
+import signal
+import secrets
+import sys
+from datetime import datetime
+from collections import defaultdict
+from contextlib import asynccontextmanager
+from typing import Dict, List, Optional
+
 from fastapi import FastAPI, HTTPException, WebSocket, Cookie, Depends
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from pydantic import BaseModel
-from typing import Dict, List, Optional
-import asyncio
+
+from agents import (
+    triage_agent, transfer_to_hemmingway, transfer_to_pynchon,
+    transfer_to_dickinson, transfer_to_dale_carnegie, transfer_to_shrink,
+    transfer_to_flapper
+)
 from swarm import Swarm, Agent
-from collections import defaultdict
-import secrets
-import uvicorn
-from contextlib import asynccontextmanager
-from agents import (triage_agent, transfer_to_hemmingway, transfer_to_pynchon,
-                   transfer_to_dickinson, transfer_to_dale_carnegie,
-                   transfer_to_shrink, transfer_to_flapper)
-import logging
-import sys
-from datetime import datetime
-import random
-import signal
 
 # Configure logging
 logging.basicConfig(

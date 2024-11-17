@@ -6,7 +6,7 @@
 
 server {
     listen 80;
-    server_name queequeg.local;
+    server_name 64.23.216.67;
 
     access_log /var/log/nginx/swarmchat.access.log;
     error_log /var/log/nginx/swarmchat.error.log;

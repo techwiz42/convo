@@ -10,9 +10,9 @@ After=network.target
 Wants=network-online.target
 
 [Service]
-User=scooter
-Group=scooter
-WorkingDirectory=/home/scooter/projects/convo
+User=peter
+Group=peter
+WorkingDirectory=/home/peter/convo
 
 # Preserve the system environment
 Environment=LANG=en_US.UTF-8
@@ -20,8 +20,7 @@ Environment=LC_ALL=en_US.UTF-8
 PassEnvironment=OPENAI_API_KEY
 
 # Add environment check before starting
-ExecStartPre=/bin/bash -c 'echo "OPENAI_API_KEY is: $OPENAI_API_KEY"'
-ExecStart=/home/scooter/.virtualenvs/swarm/bin/uvicorn swarm_chat:app --host 0.0.0.0 --port 8000 --log-level info
+ExecStart=/home/peter/.virtualenvs/swarm/bin/uvicorn swarm_chat:app --host 0.0.0.0 --port 8000 --log-level info
 
 Restart=always
 RestartSec=5

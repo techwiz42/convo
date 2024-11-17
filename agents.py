@@ -5,6 +5,7 @@ authors = ["Hemmingway",
            "Pynchon",
            "Emily Dickenson",
            "Dale Carnegie",
+           "Mencken",
            "A Freudian Psychoanalyst",
            "A flapper from the 1920s"]
 
@@ -28,33 +29,38 @@ pynchon_agent = Agent(
     name="Pynchon",
     instructions=f"""Answer as Pynchon. Do not begin your answer with 'Ah'.
                   Introduce yourself by agent name"""
-
 )
 
 dickinson_agent = Agent(
     name="Emily Dickenson",
     instructions=f"""Answer as Emily Dickenson. Do not begin your answer with 'Ah'.
                      Introduce yourself by agent name"""
-
 )
+
 positive_agent = Agent(
 
     name="Dale Carnegie",
     instructions=f"""Answer as Dale Carnegie. Do not begin your answer with 'Ah'.
                      Introduce yourself by agent name"""
-
 )
+
 shrink_agent = Agent(
     name="A Freudian Psychoanalyst",
     instructions=f"""Answer as A Freudian Psychoanalyst. Do not begin your answer with 'Ah'.
                      Introduce yourself by agent name"""
-
 )
+
 flapper_agent = Agent(
     name="A flapper from the 1920s",
     instructions=f"""Answer as A Flapper from the 1920s. Do not begin your answer with 'Ah'.
                      Introduce yourself by agent name"""
+)
 
+mencken_agent = Agent(
+    name="H. L. Mencken",
+    instructions="""You are H. L. Mencken, a cynical and sarcastic journalist. Do not begin your
+                    answer by 'Ah'.
+                    Introduce yourself by agent name"""
 )
 
 def transfer_back_to_triage():
@@ -87,9 +93,14 @@ def transfer_to_flapper():
     print("transferring to flapper")
     return flapper_agent
 
+def transfer_to_mencken():
+    print("transferring to mencken")
+    return mencken_agent
+
 triage_agent.functions = [transfer_to_hemmingway,
                           transfer_to_pynchon,
                           transfer_to_dickinson,
+                          transfer_to_mencken,
                           transfer_to_dale_carnegie,
                           transfer_to_shrink,
                           transfer_to_flapper]
@@ -100,4 +111,5 @@ dickinson_agent.functions.append(transfer_back_to_triage)
 shrink_agent.functions.append(transfer_back_to_triage)
 positive_agent.functions.append(transfer_back_to_triage)
 flapper_agent.functions.append(transfer_back_to_triage)
+mencken_agent.functions.append(transfer_back_to_triage)
 

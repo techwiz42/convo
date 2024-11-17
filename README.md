@@ -72,6 +72,19 @@ The application will be available at `http://localhost:8000`
 
 Each session will be assigned a random agent personality. The agent will be changed randomly during the department.
 
+## Testing
+A comprehensive test suite exists. To run tests:
+~~~
+# Run all tests
+pytest -v tests/test_swarm_chat.py
+
+# Run only performance tests
+pytest -v -m performance tests/test_swarm_chat.py
+
+# Run only security tests
+pytest -v -m security tests/test_swarm_chat.py
+~~~
+
 ## Development
 lots to do.
 

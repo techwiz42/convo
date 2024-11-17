@@ -12,7 +12,7 @@ A FastAPI-based chat application that implements a swarm of conversational agent
   - A Freudian Psychoanalyst
   - A 1920s Flapper
 
-- **Dynamic Agent Selection**: Randomly assigns conversation handlers for each session
+- **Dynamic Agent Selection**: Randomly assigns conversation handlers after each user response.
 - **Secure Session Management**: Implements token-based authentication
 - **Concurrent Chat Support**: Handles multiple simultaneous chat sessions with proper locking mechanisms
 - **WebSocket Integration**: Provides real-time chat functionality
@@ -22,7 +22,7 @@ A FastAPI-based chat application that implements a swarm of conversational agent
 
 ### Components
 
-1. **FastAPI Server** (`swarm_chat.py`/`swarm_chat_v1.py`)
+1. **FastAPI Server** (`swarm_chat.py`)
    - Handles HTTP endpoints and WebSocket connections
    - Manages user sessions and authentication
    - Routes messages to appropriate agents
@@ -47,12 +47,14 @@ A FastAPI-based chat application that implements a swarm of conversational agent
 1. Clone the repository:
 ```bash
 git clone <repository-url>
-cd swarm-chat
+cd swarm
 ```
 
 2. Install dependencies:
 ```bash
 pip install fastapi uvicorn pydantic
+or
+setup.py -r requirements.txt
 ```
 
 3. Start the server:
@@ -65,12 +67,13 @@ The application will be available at `http://localhost:8000`
 ## Usage
 
 1. Access the web interface through your browser
-2. Log in with any username/password (authentication is currently simplified)
+2. Log in with any username - password not required (authentication is currently simplified)
 3. Start chatting with the swarm of agents
 
-Each session will be assigned a random agent personality that will maintain its character throughout the conversation.
+Each session will be assigned a random agent personality. The agent will be changed randomly during the department.
 
 ## Development
+lots to do.
 
 ### Adding New Agents
 
@@ -106,8 +109,8 @@ new_agent = Agent(
 
 ## License
 
-[Add your license information here]
+None
 
 ## Contributing
 
-[Add contribution guidelines here]
+Fork the repo and go nuts.

@@ -160,26 +160,32 @@ async def test_session(chat_manager):
     yield token, chat_manager.sessions["test_user"]
     await chat_manager.close_session(token)
 
+
 @pytest.fixture
 async def multiple_sessions(chat_manager):
     """Provide multiple test sessions."""
     tokens = []
-    for i in range(5):
-        token = await chat_manager.create_session(f"test_user_{i}")
-        tokens.append(token)
-    yield tokens
-    for token in tokens:
-        await chat_manager.close_session(token)
+    try:
+        for i in range(5):
+            token = await chat_manager.create_session(f"test_user_{i}")
+            tokens.append(token)
+        yield tokens
+    finally:
+        for token in tokens:
+            await chat_manager.close_session(token)
 
 @pytest.fixture
 async def error_session(chat_manager):
     """Provide a session for error testing."""
     token = await chat_manager.create_session("error_test_user")
-    session = chat_manager.sessions["error_test_user"]
+    session = await chat_manager.get_session_safe(token)
     session.client.run = Mock(side_effect=RuntimeError("Test error"))
-    yield token, session
-    await chat_manager.close_session(token)
-
+    
+    try:
+        yield token, session
+    finally:
+        await chat_manager.close_session(token)
+        
 @pytest.fixture
 async def rate_limited_session(chat_manager):
     """Provide a rate-limited session for testing."""
@@ -194,8 +200,9 @@ async def rate_limited_session(chat_manager):
 async def filled_session(chat_manager):
     """Provide a session with existing messages."""
     token = await chat_manager.create_session("filled_test_user")
-    session = chat_manager.sessions["filled_test_user"]
+    session = await chat_manager.get_session_safe(token)
     
+    # Add some test messages
     test_messages = [
         {"role": "user", "content": "Hello"},
         {"role": "assistant", "content": "Hi there!"},
@@ -203,8 +210,11 @@ async def filled_session(chat_manager):
         {"role": "assistant", "content": "I'm doing well!"}
     ]
     session.messages.extend(test_messages)
-    yield token, session
-    await chat_manager.close_session(token)
+    
+    try:
+        yield token, session
+    finally:
+        await chat_manager.close_session(token)
 
 # Custom markers
 def pytest_configure(config):

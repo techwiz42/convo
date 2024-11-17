@@ -9,8 +9,7 @@ authors = ["Hemmingway",
            "A flapper from the 1920s"]
 
 def get_author():
-    author = authors[random.randint(0,len(authors) - 1)]
-    print(author)
+    author = random.choice(authors)]
     return author
 
 triage_agent = Agent(
@@ -59,32 +58,22 @@ flapper_agent = Agent(
 
 def transfer_back_to_triage():
     """call this function after each response."""
-    print("In triage")
     return triage_agent
 
 
 def transfer_to_hemmingway():
-    print("transferring to hemmingway")
     return hemmingway_agent
 
 def transfer_to_pynchon():
-    print("transferring to pynchon")
-    return pynchon_agent
-
-def transfer_to_dickinson():
-    print("transferring to dickinson")
     return dickinson_agent
 
 def transfer_to_dale_carnegie():
-    print("transferring to positive")
     return positive_agent
 
 def transfer_to_shrink():
-    print("transferring to shrink")
     return shrink_agent
 
 def transfer_to_flapper():
-    print("transferring to flapper")
     return flapper_agent
 
 triage_agent.functions = [transfer_to_hemmingway,

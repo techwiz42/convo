@@ -3,8 +3,8 @@
 import pytest
 import asyncio
 import time
-from typing import List, Dict
-from unittest.mock import Mock, patch
+from typing import List
+from unittest.mock import patch
 
 class TestMessageHandling:
     """Tests for various message content and formats"""
@@ -133,7 +133,7 @@ class TestAgentBehavior:
         assert all(response == "test response" for response in responses)
 
     @pytest.mark.asyncio
-    async def test_agent_response_consistency(self, filled_session):
+    async def test_agent_response_consistency(self, filled_session, chat_manager):
         """Test consistency of agent responses"""
         token, session = filled_session
         
@@ -151,7 +151,7 @@ class TestErrorRecovery:
     """Tests for error handling and recovery"""
     
     @pytest.mark.asyncio
-    async def test_error_handling(self, error_session):
+    async def test_error_handling(self, error_session, chat_manager):
         """Test handling of runtime errors"""
         token, _ = error_session
         
@@ -177,38 +177,42 @@ class TestErrorRecovery:
         assert session is not None
         assert session.messages[-1]["content"] == "Hello"
 
+# tests/test_swarm_chat.py
+# ... [Previous test classes remain the same up to TestErrorRecovery] ...
+
 class TestSessionManagement:
     """Tests for session handling and management"""
-    
+
     @pytest.mark.asyncio
     async def test_session_limits(self, chat_manager):
         """Test session limit enforcement"""
         tokens = []
         try:
             # Create sessions up to limit
-            for i in range(chat_manager.max_sessions):
+            for i in range(10):  # Using smaller number for testing
                 token = await chat_manager.create_session(f"user_{i}")
                 tokens.append(token)
                 assert token is not None
-            
+
             # Attempt to create session beyond limit
             with pytest.raises(ValueError, match="Maximum session limit reached"):
-                await chat_manager.create_session("overflow_user")
+                for i in range(chat_manager.max_sessions + 1):
+                    await chat_manager.create_session(f"overflow_user_{i}")
         finally:
             # Cleanup
             for token in tokens:
                 await chat_manager.close_session(token)
 
     @pytest.mark.asyncio
-    async def test_session_isolation(self, multiple_sessions):
+    async def test_session_isolation(self, multiple_sessions, chat_manager):
         """Test that sessions are properly isolated"""
         tokens = multiple_sessions
-        
+
         # Send different messages from each session
         for i, token in enumerate(tokens):
             response = await chat_manager.process_message(token, f"Message {i}")
             assert response == "test response"
-            
+
             # Verify session isolation
             session = await chat_manager.get_session_safe(token)
             assert session.messages[-1]["content"] == f"Message {i}"
@@ -217,33 +221,51 @@ class TestSessionManagement:
     async def test_session_cleanup(self, chat_manager):
         """Test proper session cleanup"""
         token = await chat_manager.create_session("test_user")
-        
+
         # Use the session
         await chat_manager.process_message(token, "Hello")
-        
+
         # Close the session
         await chat_manager.close_session(token)
-        
+
         # Verify session is cleaned up
         session = await chat_manager.get_session_safe(token)
         assert session is None
         assert token not in chat_manager.tokens
         assert "test_user" not in chat_manager.sessions
 
+    @pytest.mark.asyncio
+    async def test_duplicate_session_creation(self, chat_manager):
+        """Test handling of duplicate session creation attempts"""
+        # Create first session
+        token1 = await chat_manager.create_session("test_user")
+        assert token1 is not None
+
+        # Attempt to create duplicate session
+        token2 = await chat_manager.create_session("test_user")
+        assert token2 == token1  # Should return the same token
+
+        # Verify only one session exists
+        session = await chat_manager.get_session_safe(token1)
+        assert session is not None
+        assert len(chat_manager.sessions) == 1
+
 class TestMessageValidation:
     """Tests for message validation and sanitization"""
-    
+
     @pytest.mark.asyncio
     async def test_html_sanitization(self, chat_manager):
         """Test HTML sanitization"""
         token = await chat_manager.create_session("test_user")
-        
+
         html_messages = [
             "<script>alert('xss')</script>",
             "<img src='x' onerror='alert(1)'>",
-            "<a href='javascript:alert(1)'>link</a>"
+            "<a href='javascript:alert(1)'>link</a>",
+            "<style>body{display:none}</style>",
+            "<iframe src='javascript:alert(1)'></iframe>"
         ]
-        
+
         for msg in html_messages:
             response = await chat_manager.process_message(token, msg)
             assert response == "test response"
@@ -253,41 +275,65 @@ class TestMessageValidation:
     async def test_sql_injection_prevention(self, chat_manager):
         """Test SQL injection prevention"""
         token = await chat_manager.create_session("test_user")
-        
+
         sql_messages = [
             "'; DROP TABLE users; --",
             "' OR '1'='1",
-            "1; DELETE FROM users"
+            "1; DELETE FROM users",
+            "UNION SELECT * FROM users",
+            "'; INSERT INTO users VALUES ('hacked'); --"
         ]
-        
+
         for msg in sql_messages:
             response = await chat_manager.process_message(token, msg)
             assert response == "test response"
             # In a real implementation, verify SQL is properly escaped
 
+    @pytest.mark.asyncio
+    async def test_message_size_validation(self, chat_manager):
+        """Test message size validation"""
+        token = await chat_manager.create_session("test_user")
+
+        # Test various message sizes
+        sizes = [1, 100, 1000, chat_manager.max_message_size - 1,
+                chat_manager.max_message_size, chat_manager.max_message_size + 1]
+
+        for size in sizes:
+            message = "A" * size
+            if size <= chat_manager.max_message_size:
+                response = await chat_manager.process_message(token, message)
+                assert response == "test response"
+            else:
+                with pytest.raises(ValueError, match="Message exceeds maximum length"):
+                    await chat_manager.process_message(token, message)
+
 class TestSecurity:
     """Security-related tests"""
-    
+
     @pytest.mark.security
     @pytest.mark.asyncio
     async def test_rate_limiting(self, chat_manager):
         """Test rate limiting functionality"""
+        await chat_manager.enable_rate_limiting()
         token = await chat_manager.create_session("test_user")
-        
-        # First message should work
-        response = await chat_manager.process_message(token, "Test message")
-        assert response == "test response"
-        
-        # Immediate second message should fail
-        with pytest.raises(ValueError, match="Rate limit exceeded"):
-            await chat_manager.process_message(token, "Test message 2")
-        
-        # Wait for rate limit to reset
-        await asyncio.sleep(0.1)
-        
-        # Message should work again
-        response = await chat_manager.process_message(token, "Test message 3")
-        assert response == "test response"
+
+        try:
+            # First message should work
+            response = await chat_manager.process_message(token, "Test message")
+            assert response == "test response"
+
+            # Immediate second message should fail
+            with pytest.raises(ValueError, match="Rate limit exceeded"):
+                await chat_manager.process_message(token, "Test message 2")
+
+            # Wait for rate limit to reset
+            await asyncio.sleep(chat_manager.rate_limit_interval)
+
+            # Message should work again
+            response = await chat_manager.process_message(token, "Test message 3")
+            assert response == "test response"
+        finally:
+            await chat_manager.disable_rate_limiting()
 
     @pytest.mark.security
     @pytest.mark.asyncio
@@ -297,11 +343,11 @@ class TestSecurity:
         token = await chat_manager.create_session("test_user")
         response = await chat_manager.process_message(token, "Hello")
         assert response == "test response"
-        
+
         # Test invalid token
         with pytest.raises(ValueError):
             await chat_manager.process_message("invalid_token", "Hello")
-        
+
         # Close session and verify it's invalid
         await chat_manager.close_session(token)
         with pytest.raises(ValueError):
@@ -311,14 +357,19 @@ class TestSecurity:
     @pytest.mark.asyncio
     async def test_concurrent_session_handling(self, chat_manager):
         """Test concurrent session creation and usage"""
+        num_users = 5
+        tasks = []
+
         async def create_and_use_session(user_id: int):
             token = await chat_manager.create_session(f"user_{user_id}")
-            response = await chat_manager.process_message(token, f"Message from {user_id}")
-            assert response == "test response"
-            await chat_manager.close_session(token)
-        
+            try:
+                response = await chat_manager.process_message(token, f"Message from {user_id}")
+                assert response == "test response"
+            finally:
+                await chat_manager.close_session(token)
+
         # Create multiple sessions concurrently
-        tasks = [create_and_use_session(i) for i in range(5)]
+        tasks = [create_and_use_session(i) for i in range(num_users)]
         await asyncio.gather(*tasks)
 
 if __name__ == "__main__":

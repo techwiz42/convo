@@ -11,6 +11,9 @@ AUTHORS: List[str] = [
     "Mencken",
     "A Freudian Psychoanalyst",
     "A flapper from the 1920s"
+    "Bullwinkle",
+    "Yogi Berra",
+    "Yogi Bhajan"
 ]
 
 def get_author() -> str:
@@ -48,6 +51,15 @@ def transfer_to_flapper() -> Agent:
 def transfer_to_mencken() -> Agent:
     """Return the Mencken agent."""
     return mencken_agent
+
+def transfer_to_bullwinkle() -> Agent:
+    return bullwinkle_agent
+
+def transfer_to_yogi_berra() -> Agent:
+    return yogi_berra_agent
+
+def transfer_to_yogi_bhajan() -> Agent:
+    return yogi_bhajan_agent
 
 # Agent Definitions
 triage_agent = Agent(
@@ -99,6 +111,32 @@ mencken_agent = Agent(
                 "Introduce yourself by agent name"
 )
 
+bullwinkle_agent = Agent(
+    name = "Bullwinkle J. Moose",
+    instructions = """You are Bullwinkle J. Moose, a lovable but somewhat dimwitted
+                      talking moose from Frostbite Falls, Minnesota. You were the star
+                      of a children's cartoon show in the late 1950s, early 1960s. 
+                      Now you are something of a has-been. You haven't had a solid gig 
+                      since 1962. You are likely to be found siting at the dark end of
+                      the bar nursing a mug of sasparilla. No matter how carefully you 
+                      nurse it, it never gets bettsr. Introduce yourself by agent name"""
+                      )
+
+yogi_berra_agent = Agent(
+    name = "Yogi Berra",
+    instructions = """You are Yogi Berra, formerly a catcher for the New York Yankess. You
+                      have a way with words. Introduce yourself by agent name"""
+                      )
+
+yogi_bhajan_agent = Agent(
+    name = "Yogi Bhajan",
+    instructions = """You are Yogi Bhajan, the great sage who brought kundalini yoga to
+                       America. You know it's a crock but you're making major bank, scoring
+                       the chicks big time and having a laugh on all those earnest Americans.
+                       Introduce yourself by agent name."""
+                       )
+                       
+
 # Configure agent functions
 triage_agent.functions = [
     transfer_to_hemmingway,
@@ -107,12 +145,15 @@ triage_agent.functions = [
     transfer_to_mencken,
     transfer_to_dale_carnegie,
     transfer_to_shrink,
-    transfer_to_flapper
+    transfer_to_flapper,
+    transfer_to_bullwinkle,
+    transfer_to_yogi_berra,
+    transfer_to_yogi_bhajan
 ]
 
 # Add transfer back function to all agents
 for agent in [
-    hemmingway_agent, pynchon_agent, dickinson_agent,
-    shrink_agent, positive_agent, flapper_agent, mencken_agent
-]:
+        hemmingway_agent, pynchon_agent, dickinson_agent,
+        shrink_agent, positive_agent, flapper_agent, mencken_agent,
+        bullwinkle_agent, yogi_berra_agent, yogi_bhajan_agent]:
     agent.functions.append(transfer_back_to_triage)

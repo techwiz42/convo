@@ -11,7 +11,7 @@ from typing import Dict, List, Optional, AsyncGenerator
 
 # Third-party imports
 import uvicorn  # pylint: disable=import-error
-from fastapi import FastAPI, HTTPException, Depends  # pylint: disable=import-error
+from fastapi import FastAPI, HTTPException, Depends, Cookie  # pylint: disable=import-error
 from fastapi.responses import HTMLResponse  # pylint: disable=import-error
 from fastapi.staticfiles import StaticFiles  # pylint: disable=import-error
 from fastapi.security import HTTPBasic, HTTPBasicCredentials  # pylint: disable=import-error
@@ -56,7 +56,6 @@ security = HTTPBasic()
 class ChatMessage(BaseModel):
     """Model for chat messages."""
     content: str
- 
     def __str__(self) -> str:
         """String representation of chat message."""
         return self.content
@@ -139,7 +138,7 @@ class SwarmChatManager:
                 finally:
                     logger.debug("Session released for user: %s", username)
 
-        except Exception as e:
+        except (KeyError, ValueError) as e:
             logger.error("Error in get_session_safe: %s", str(e))
             yield None
 

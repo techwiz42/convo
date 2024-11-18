@@ -97,6 +97,29 @@ pytest tests/test_swarm_chat.py::TestMessageHandling::test_basic_message -v
 ~~~
 Omit the -v for less verbose output.
 
+Before checking in: 
+* run pylint to verify pep-8 code compliance
+* run mypy for syntax and static type check
+
+## Deployment
+The code runs as ~~~swarmchat.service~~~ in a DigitalOcean droplet. 
+It runs as a service in the NGINX web server.
+To restart the service   
+~~~
+>sudo systemctl restart swarmchat.service
+~~~
+Check service status like so
+~~~
+>sudo systemctl status swarmchat.service
+~~~
+And if the status is not 'running', get error output like so:
+~~~
+>journalctl -u swarmchat -n 25
+~~~
+So far, the project is deployed manually as the procedure is not
+overly involved. Future development work would include creating
+a CI/CD pipeline.
+
 ## Development
 lots to do.
 

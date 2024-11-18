@@ -16,7 +16,7 @@ from fastapi.responses import HTMLResponse  # pylint: disable=import-error
 from fastapi.staticfiles import StaticFiles  # pylint: disable=import-error
 from fastapi.security import HTTPBasic, HTTPBasicCredentials  # pylint: disable=import-error
 from pydantic import BaseModel  # pylint: disable=import-error
-from swarm import Swarm, Agent  # pylint: disable=import-error
+from swarm import Swarm, Agent  # type: ignore # pylint: disable=import-error
 
 # Local imports
 from agents import (

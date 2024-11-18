@@ -15,6 +15,7 @@ from fastapi import FastAPI, HTTPException, Depends, Cookie  # pylint: disable=i
 from fastapi.responses import HTMLResponse  # pylint: disable=import-error
 from fastapi.staticfiles import StaticFiles  # pylint: disable=import-error
 from fastapi.security import HTTPBasic, HTTPBasicCredentials  # pylint: disable=import-error
+from fastapi.middleware.cors import CORSMiddleware # pylint: disable=import-error
 from pydantic import BaseModel  # pylint: disable=import-error
 from swarm import Swarm, Agent  # type: ignore # pylint: disable=import-error
 
@@ -50,6 +51,15 @@ uvicorn_logger.addHandler(logging.StreamHandler())
 uvicorn_logger.setLevel(logging.WARNING)
 
 app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # In production, specify your mobile app's domain
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 security = HTTPBasic()
 
 #pylint: disable=R0903
@@ -71,7 +81,14 @@ class UserSession:
         self.agent: Agent = triage_agent
         self.lock: asyncio.Lock = asyncio.Lock()
         self.first_message_handled: bool = False
-        logger.info("New session created for user: %s", username)
+        
+        # Add initial greeting message from triage agent
+        initial_greeting = {
+            "role": "assistant",
+            "content": f"Hello {username}! Welcome to Swarm Chat. I'm the triage agent, and I'll be connecting you with various interesting personalities. How are you today?"
+        }
+        self.messages.append(initial_greeting)
+        logger.info("New session created for user: %s with initial greeting", username)
 
     def select_random_agent(self) -> Agent:
         """Select and instantiate a random agent."""
@@ -91,7 +108,6 @@ class UserSession:
         new_agent = selected_func()
         logger.info("Selected random agent: %s", new_agent.name)
         return new_agent
-
 
 class SwarmChatManager:
     """Manager class for handling chat sessions."""
@@ -241,11 +257,21 @@ async def login(credentials: HTTPBasicCredentials = Depends(security)) -> dict:
     try:
         logger.info("Login attempt: %s", credentials.username)
         token = await chat_manager.create_session(credentials.username)
-        return {"token": token, "username": credentials.username}
+        
+        # Get the initial message from the session
+        async with chat_manager.get_session_safe(token) as session:
+            if not session:
+                raise HTTPException(status_code=401, detail="Invalid session")
+            initial_message = session.messages[0] if session.messages else None
+            
+        return {
+            "token": token, 
+            "username": credentials.username,
+            "initial_message": initial_message
+        }
     except Exception as e:
         logger.error("Login failed: %s", str(e))
         raise HTTPException(status_code=500, detail="Login failed") from e
-
 
 @app.post("/chat")
 async def send_message(message: ChatMessage, token: str = Cookie(None)) -> dict:

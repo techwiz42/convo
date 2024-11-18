@@ -102,7 +102,7 @@ Before checking in:
 * run mypy for syntax and static type check
 
 ## Deployment
-The code runs as ~~~swarmchat.service~~~ in a DigitalOcean droplet. 
+The code runs as swarmchat.service in a DigitalOcean droplet. 
 It runs as a service in the NGINX web server.
 To restart the service   
 ~~~

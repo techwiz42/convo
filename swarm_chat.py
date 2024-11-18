@@ -1,19 +1,24 @@
+"""FastAPI-based chat application that manages multi-agent
+   conversations using a swarm architecture."""
+
 import asyncio
 import logging
 import random
 import secrets
-from datetime import datetime
-from collections import defaultdict
 from contextlib import asynccontextmanager
+from datetime import datetime
 from typing import Dict, List, Optional, AsyncGenerator
 
-import uvicorn
-from fastapi import FastAPI, HTTPException, WebSocket, Cookie, Depends
-from fastapi.responses import HTMLResponse
-from fastapi.staticfiles import StaticFiles
-from fastapi.security import HTTPBasic, HTTPBasicCredentials
-from pydantic import BaseModel
+# Third-party imports
+import uvicorn  # pylint: disable=import-error
+from fastapi import FastAPI, HTTPException, Depends  # pylint: disable=import-error
+from fastapi.responses import HTMLResponse  # pylint: disable=import-error
+from fastapi.staticfiles import StaticFiles  # pylint: disable=import-error
+from fastapi.security import HTTPBasic, HTTPBasicCredentials  # pylint: disable=import-error
+from pydantic import BaseModel  # pylint: disable=import-error
+from swarm import Swarm, Agent  # pylint: disable=import-error
 
+# Local imports
 from agents import (
     triage_agent,
     transfer_to_hemmingway,
@@ -22,8 +27,11 @@ from agents import (
     transfer_to_dale_carnegie,
     transfer_to_shrink,
     transfer_to_flapper,
+    transfer_to_bullwinkle,
+    transfer_to_yogi_berra,
+    transfer_to_yogi_bhajan,
+    transfer_to_mencken
 )
-from swarm import Swarm, Agent
 
 # Configure logging
 logging.basicConfig(
@@ -44,13 +52,16 @@ uvicorn_logger.setLevel(logging.WARNING)
 app = FastAPI()
 security = HTTPBasic()
 
-
+#pylint: disable=R0903
 class ChatMessage(BaseModel):
     """Model for chat messages."""
-
     content: str
+ 
+    def __str__(self) -> str:
+        """String representation of chat message."""
+        return self.content
 
-
+#pylint: disable=R0903
 class UserSession:
     """Class to manage user sessions."""
 
@@ -61,7 +72,7 @@ class UserSession:
         self.agent: Agent = triage_agent
         self.lock: asyncio.Lock = asyncio.Lock()
         self.first_message_handled: bool = False
-        logger.info(f"New session created for user: {username}")
+        logger.info("New session created for user: %s", username)
 
     def select_random_agent(self) -> Agent:
         """Select and instantiate a random agent."""
@@ -72,10 +83,14 @@ class UserSession:
             transfer_to_dale_carnegie,
             transfer_to_shrink,
             transfer_to_flapper,
+            transfer_to_bullwinkle,
+            transfer_to_yogi_berra,
+            transfer_to_mencken,
+            transfer_to_yogi_bhajan
         ]
         selected_func = random.choice(agents)
         new_agent = selected_func()
-        logger.info(f"Selected random agent: {new_agent.name}")
+        logger.info("Selected random agent: %s", new_agent.name)
         return new_agent
 
 
@@ -106,26 +121,26 @@ class SwarmChatManager:
             async with self.tokens_lock:
                 username = self.tokens.get(token)
                 if not username:
-                    logger.warning(f"Invalid token attempted: {token[:8]}...")
+                    logger.warning("Invalid token attempted: %s...", token[:8])
                     yield None
                     return
 
             async with self.sessions_lock:
                 session = self.sessions.get(username)
                 if not session:
-                    logger.warning(f"No session found for username: {username}")
+                    logger.warning("No session found for username: %s", username)
                     yield None
                     return
 
             async with session.lock:
-                logger.debug(f"Session acquired for user: {username}")
+                logger.debug("Session acquired for user: %s", username)
                 try:
                     yield session
                 finally:
-                    logger.debug(f"Session released for user: {username}")
+                    logger.debug("Session released for user: %s", username)
 
         except Exception as e:
-            logger.error(f"Error in get_session_safe: {str(e)}")
+            logger.error("Error in get_session_safe: %s", str(e))
             yield None
 
     async def create_session(self, username: str) -> str:
@@ -142,8 +157,8 @@ class SwarmChatManager:
             return token
 
         except Exception as e:
-            logger.error(f"Session creation failed: {str(e)}")
-            raise HTTPException(status_code=500, detail="Error creating session")
+            logger.error("Session creation failed: %s", str(e))
+            raise HTTPException(status_code=500, detail="Error creating session") from e
 
     async def process_message(self, token: str, content: str) -> Optional[str]:
         """Process a message and return the response."""
@@ -162,7 +177,7 @@ class SwarmChatManager:
                     session.first_message_handled = True
                 else:
                     session.agent = session.select_random_agent()
-                    logger.info(f"Using agent: {session.agent.name}")
+                    logger.info("Using agent: %s", session.agent.name)
 
                 response = await asyncio.to_thread(
                     session.client.run, agent=session.agent, messages=session.messages
@@ -177,10 +192,10 @@ class SwarmChatManager:
                 return None
 
         except Exception as e:
-            logger.error(f"Message processing error: {str(e)}", exc_info=True)
+            logger.error("Message processing error: %s", str(e), exc_info=True)
             raise HTTPException(
                 status_code=500, detail=f"Error processing message: {str(e)}"
-            )
+            ) from e
 
     async def get_user_messages(self, token: str) -> List[dict]:
         """Safely get user messages with proper locking."""
@@ -191,17 +206,17 @@ class SwarmChatManager:
         try:
             async with self.get_session_safe(token) as session:
                 if not session:
-                    logger.warning(f"Invalid session for token: {token[:8]}...")
+                    logger.warning("Invalid session for token: %s...", token[:8])
                     raise HTTPException(status_code=401, detail="Invalid session")
 
-                logger.debug(f"Retrieving messages for session")
+                logger.debug("Retrieving messages for session")
                 return session.messages.copy()
 
         except Exception as e:
-            logger.error(f"Message retrieval error: {str(e)}")
+            logger.error("Message retrieval error: %s", str(e))
             raise HTTPException(
                 status_code=500, detail=f"Error retrieving messages: {str(e)}"
-            )
+            ) from e
 
 
 chat_manager = SwarmChatManager()
@@ -214,23 +229,23 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 async def get_chat_page() -> str:
     """Serve the chat page."""
     try:
-        with open("static/index.html") as f:
+        with open("static/index.html", encoding='utf-8') as f:
             return f.read()
     except Exception as e:
-        logger.error(f"Error serving chat page: {str(e)}")
-        raise HTTPException(status_code=500, detail="Error serving chat page")
+        logger.error("Error serving chat page: %s", str(e))
+        raise HTTPException(status_code=500, detail="Error serving chat page") from e
 
 
 @app.post("/login")
 async def login(credentials: HTTPBasicCredentials = Depends(security)) -> dict:
     """Handle user login."""
     try:
-        logger.info(f"Login attempt: {credentials.username}")
+        logger.info("Login attempt: %s", credentials.username)
         token = await chat_manager.create_session(credentials.username)
         return {"token": token, "username": credentials.username}
     except Exception as e:
-        logger.error(f"Login failed: {str(e)}")
-        raise HTTPException(status_code=500, detail="Login failed")
+        logger.error("Login failed: %s", str(e))
+        raise HTTPException(status_code=500, detail="Login failed") from e
 
 
 @app.post("/chat")

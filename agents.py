@@ -14,7 +14,7 @@ AUTHORS: List[str] = [
     "Mencken",
     "A Freudian Psychoanalyst",
     "A flapper from the 1920s",
-    "Bullwinkel J. Moose",
+    "Bullwinkle J. Moose",
     "Yogi Berra",
     "Yogi Bhajan"
 ]

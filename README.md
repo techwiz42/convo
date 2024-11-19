@@ -72,7 +72,7 @@ The application will be available at `http://localhost:8000`
 2. Log in with any username - password not required (authentication is currently simplified)
 3. Start chatting with the swarm of agents
 
-Each session will be assigned a random agent personality. The agent will be changed randomly during the department.
+Each session will be assigned a random agent personality. The agent will be changed randomly during the conversation.
 
 ## Testing
 A comprehensive test suite exists. To run tests:

@@ -101,7 +101,7 @@ Omit the -v for less verbose output.
 
 Before checking in: 
 * run pylint to verify pep-8 code compliance
-* run mypy for syntax and static type check
+* run mypy --check-untyped-defs for syntax and static type check
 
 ## Deployment
 The code runs as swarmchat.service in a DigitalOcean droplet. 

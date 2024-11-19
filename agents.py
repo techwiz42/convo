@@ -53,6 +53,7 @@ def transfer_to_mencken() -> Agent:
     return mencken_agent
 
 def transfer_to_bullwinkle() -> Agent:
+    """Return the bullwinkle agent"""
     return bullwinkle_agent
 
 def transfer_to_yogi_berra() -> Agent:

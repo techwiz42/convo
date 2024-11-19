@@ -252,7 +252,6 @@ class SwarmChatManager:
         if not token:
             logger.warning("No token provided for message retrieval")
             raise HTTPException(status_code=401, detail="Not authenticated")
-
         try:
             async with self.get_session_safe(token) as session:
                 if not session:

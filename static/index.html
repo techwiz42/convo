@@ -54,7 +54,7 @@
             background-color: white;
             border-radius: 8px;
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            margin-bottom: 100px;  /* Make room for footer */
+            margin-bottom: 100px;
         }
 
         #login-container h2 {
@@ -71,7 +71,7 @@
             border-radius: 8px;
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
             display: none;
-            margin-bottom: 100px;  /* Make room for footer */
+            margin-bottom: 100px;
         }
 
         #messages {
@@ -81,6 +81,35 @@
             border: 1px solid #e0e0e0;
             border-radius: 5px;
             margin-bottom: 20px;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+            z-index: 1000;
+        }
+
+        .modal-content {
+            background-color: white;
+            margin: 15% auto;
+            padding: 20px;
+            border-radius: 8px;
+            width: 80%;
+            max-width: 600px;
+            position: relative;
+        }
+
+        .modal-close {
+            position: absolute;
+            right: 10px;
+            top: 10px;
+            font-size: 24px;
+            cursor: pointer;
         }
 
         .input-group {
@@ -148,20 +177,6 @@
             line-height: 1.5;
         }
 
-        .message ul {
-            margin: 10px 0;
-            padding-left: 20px;
-        }
-        
-        .message li {
-            margin: 5px 0;
-            color: #444;
-        }
-
-        .message strong {
-            color: #2196F3;
-        }
-
         .user-message {
             background-color: #e3f2fd;
             margin-left: auto;
@@ -171,6 +186,29 @@
         .assistant-message {
             background-color: #f5f5f5;
             margin-right: auto;
+        }
+
+        .footer {
+            text-align: center;
+            padding: 20px;
+            font-size: 14px;
+            color: #666;
+            position: fixed;
+            bottom: 0;
+            width: 100%;
+            background-color: white;
+            border-top: 1px solid #eee;
+            left: 0;
+        }
+
+        .footer a {
+            color: #2196F3;
+            text-decoration: none;
+            margin: 0 10px;
+        }
+
+        .footer a:hover {
+            text-decoration: underline;
         }
 
         @keyframes typing {
@@ -215,32 +253,26 @@
             animation: rotate 1s linear infinite;
             margin-right: 8px;
         }
-
-        .footer {
-            text-align: center;
-            padding: 20px;
-            font-size: 14px;
-            color: #666;
-            position: fixed;
-            bottom: 0;
-            width: 100%;
-            background-color: white;
-            border-top: 1px solid #eee;
-            left: 0;
-        }
-
-        .footer a {
-            color: #2196F3;
-            text-decoration: none;
-            margin: 0 10px;
-        }
-
-        .footer a:hover {
-            text-decoration: underline;
-        }
     </style>
 </head>
 <body>
+    <div id="intro-modal" class="modal">
+        <div class="modal-content">
+            <span class="modal-close">&times;</span>
+            <strong>Welcome to Swarm Chat!</strong><br><br>
+            This is a unique chat experience where you'll interact with a variety of AI personalities, including:
+            <ul>
+                <li>Ernest Hemingway - Known for direct, terse prose</li>
+                <li>Thomas Pynchon - Complex, postmodern style</li>
+                <li>Emily Dickinson - Poetic and contemplative</li>
+                <li>Dale Carnegie - Motivational and positive</li>
+                <li>H. L. Mencken - A somewhat caustic journalist</li>
+                <li>A Freudian Psychoanalyst - Deep psychological insights</li>
+                <li>...and many more</li>
+            </ul>
+        </div>
+    </div>
+
     <div id="status-indicator">
         <div class="status-left">
             <div class="status-dot"></div>
@@ -281,26 +313,13 @@
         async function loadInitialMessage() {
             const welcomeDiv = document.createElement('div');
             welcomeDiv.className = 'message assistant-message';
-            welcomeDiv.innerHTML = `
-                <strong>Welcome to Swarm Chat!</strong><br><br>
-                This is a unique chat experience where you'll interact with a variety of AI personalities, including:
-                <ul>
-                    <li>Ernest Hemingway - Known for direct, terse prose</li>
-                    <li>Thomas Pynchon - Complex, postmodern style</li>
-                    <li>Emily Dickinson - Poetic and contemplative</li>
-                    <li>Dale Carnegie - Motivational and positive</li>
-		    <li>H. L. Mencken - A somewhat caustic journalist</li>
-                    <li>A Freudian Psychoanalyst - Deep psychological insights</li>
-		    <li>...and many more, depending on <a href="https://www.linkedin.com/in/psisk/" target=_blank>The Creator's</a> whim.</li>
-                </ul>
-                Each response will come from a randomly selected personality, making every conversation unique and engaging.<p>
-This chatbot was implemented using <a href="https://github.com/openai/swarm" target=_blank>OpenAI's Swarm framework.<a><p>
-                Ask me anything!
-            `;
+            welcomeDiv.textContent = "Hello, I'm the moderator. I'm here to help guide our conversation. What's on your mind today?";
             messagesDiv.appendChild(welcomeDiv);
             messagesDiv.scrollTop = messagesDiv.scrollHeight;
+            
+            document.getElementById('intro-modal').style.display = 'block';
         }
-        
+
         function createTypingIndicator() {
             const div = document.createElement('div');
             div.className = 'typing-indicator';
@@ -318,6 +337,10 @@ This chatbot was implemented using <a href="https://github.com/openai/swarm" tar
             messagesDiv.appendChild(indicator);
             messagesDiv.scrollTop = messagesDiv.scrollHeight;
             return indicator;
+        }
+
+        document.querySelector('.modal-close').onclick = function() {
+            document.getElementById('intro-modal').style.display = 'none';
         }
 
         function exitSession() {
@@ -357,7 +380,6 @@ This chatbot was implemented using <a href="https://github.com/openai/swarm" tar
                 const data = await response.json();
                 document.cookie = `token=${data.token}; path=/`;
                 
-                // Update UI
                 document.getElementById('login-container').style.display = 'none';
                 document.getElementById('chat-container').style.display = 'block';
                 document.getElementById('exit-button').style.display = 'block';
@@ -366,11 +388,7 @@ This chatbot was implemented using <a href="https://github.com/openai/swarm" tar
                 statusDot.style.backgroundColor = '#00ff00';
                 statusText.textContent = `Connected as ${username}`;
 
-                // Load initial history
-                await loadHistory();
-                if (messagesDiv.children.length === 0) {
-                    await loadInitialMessage();
-                }
+                await loadInitialMessage();
             } catch (error) {
                 console.error('Login error:', error);
                 alert('Login failed. Please try again.');
@@ -385,28 +403,6 @@ This chatbot was implemented using <a href="https://github.com/openai/swarm" tar
             messagesDiv.scrollTop = messagesDiv.scrollHeight;
         }
 
-        async function loadHistory() {
-            try {
-                const response = await fetch('/history');
-                if (!response.ok) {
-                    if (response.status === 401) {
-                        document.getElementById('login-container').style.display = 'block';
-                        document.getElementById('chat-container').style.display = 'none';
-                        document.getElementById('exit-button').style.display = 'none';
-                        return;
-                    }
-                    throw new Error(`HTTP error! status: ${response.status}`);
-                }
-                const data = await response.json();
-                messagesDiv.innerHTML = '';
-                data.messages.forEach(message => {
-                    appendMessage(message.role, message.content);
-                });
-            } catch (error) {
-                console.error('Error loading history:', error);
-            }
-        }
-
         function setResponding(isResponding) {
             messageInput.disabled = isResponding;
             sendButton.disabled = isResponding;
@@ -417,11 +413,11 @@ This chatbot was implemented using <a href="https://github.com/openai/swarm" tar
             if (!content) return;
 
             try {
-                // Disable input and show typing indicator
+                document.getElementById('intro-modal').style.display = 'none';
                 setResponding(true);
                 appendMessage('user', content);
                 messageInput.value = '';
-                
+
                 const typingIndicator = showTypingIndicator();
 
                 const response = await fetch('/chat', {
@@ -432,7 +428,6 @@ This chatbot was implemented using <a href="https://github.com/openai/swarm" tar
                     body: JSON.stringify({ content: content })
                 });
 
-                // Remove typing indicator
                 typingIndicator.remove();
 
                 if (!response.ok) {
@@ -452,7 +447,6 @@ This chatbot was implemented using <a href="https://github.com/openai/swarm" tar
             } catch (error) {
                 console.error('Error:', error);
                 alert('Error sending message');
-                await loadHistory(); // Reload history in case of error
             } finally {
                 setResponding(false);
             }
@@ -465,7 +459,6 @@ This chatbot was implemented using <a href="https://github.com/openai/swarm" tar
             }
         });
 
-        // Add username field Enter key support
         document.getElementById('username').addEventListener('keypress', function(event) {
             if (event.key === 'Enter') {
                 event.preventDefault();
@@ -473,15 +466,7 @@ This chatbot was implemented using <a href="https://github.com/openai/swarm" tar
             }
         });
 
-        // Add exit button handler
         exitButton.addEventListener('click', exitSession);
-
-        // Check login status on load
-        document.addEventListener('DOMContentLoaded', () => {
-            loadHistory().catch(error => {
-                console.error('Initial load error:', error);
-            });
-        });
     </script>
 </body>
 </html>

@@ -22,7 +22,7 @@ from swarm import Swarm, Agent  # type: ignore # pylint: disable=import-error
 
 # Local imports
 from agents import (
-    triage_agent,
+    moderator,
     transfer_to_hemmingway,
     transfer_to_pynchon,
     transfer_to_dickinson,
@@ -92,7 +92,7 @@ class UserSession:
         self.username: str = username
         self.messages: List[dict] = []
         self.client: Swarm = Swarm()
-        self.agent: Agent = triage_agent
+        self.agent: Agent = moderator
         self.lock: asyncio.Lock = asyncio.Lock()
         self.first_message_handled: bool = False
         logger.info("New session created for user: %s", username)
@@ -218,7 +218,7 @@ class SwarmChatManager:
                 session.messages.append({"role": "user", "content": content})
 
                 if not session.first_message_handled:
-                    logger.info("Processing first message with triage agent")
+                    logger.info("Processing first message with moderator")
                     session.first_message_handled = True
                 else:
                     session.agent = session.select_random_agent()

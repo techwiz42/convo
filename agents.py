@@ -20,9 +20,9 @@ def get_author() -> str:
     """Get a random author from the AUTHORS list."""
     return random.choice(AUTHORS)
 
-def transfer_back_to_triage() -> Agent:
-    """Return the triage agent after each response."""
-    return triage_agent
+def transfer_back_to_moderator() -> Agent:
+    """Return the moderator agent after each response."""
+    return moderator
 
 def transfer_to_hemmingway() -> Agent:
     """Return the Hemmingway agent."""
@@ -65,7 +65,7 @@ def transfer_to_yogi_bhajan() -> Agent:
     return yogi_bhajan_agent
 
 # Agent Definitions
-triage_agent = Agent(
+moderator = Agent(
     name="Triage Agent",
     instructions=f"Transfer to agent whose name == {get_author()}. "
                 "Call this function after that agent's response",
@@ -142,7 +142,7 @@ yogi_bhajan_agent = Agent(
 
 
 # Configure agent functions
-triage_agent.functions = [
+moderator.functions = [
     transfer_to_hemmingway,
     transfer_to_pynchon,
     transfer_to_dickinson,
@@ -161,4 +161,4 @@ for agent in [
     shrink_agent, positive_agent, flapper_agent, mencken_agent,
     bullwinkle_agent, yogi_berra_agent, yogi_bhajan_agent
 ]:
-    agent.functions.append(transfer_back_to_triage)
+    agent.functions.append(transfer_back_to_moderator)

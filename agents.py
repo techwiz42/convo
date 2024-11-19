@@ -152,7 +152,7 @@ moderator.functions = [
     transfer_to_flapper,
     transfer_to_bullwinkle,
     transfer_to_yogi_berra,
-    transfer_to_yogi_bhajan
+    transfer_to_yogi_bhajan,
 ]
 
 # Add transfer back function to all agents

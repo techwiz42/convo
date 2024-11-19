@@ -13,7 +13,10 @@ AUTHORS: List[str] = [
     "Dale Carnegie",
     "Mencken",
     "A Freudian Psychoanalyst",
-    "A flapper from the 1920s"
+    "A flapper from the 1920s",
+    "Bullwinkel J. Moose",
+    "Yogi Berra",
+    "Yogi Bhajan"
 ]
 
 def get_author() -> str:

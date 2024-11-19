@@ -18,6 +18,8 @@ A FastAPI-based chat application that implements a swarm of conversational agent
 - **WebSocket Integration**: Provides real-time chat functionality
 - **Message History**: Maintains conversation history per user session
 
+** See SwarmChat online at http://swarmchat.me **
+
 ## Technical Architecture
 
 ### Components

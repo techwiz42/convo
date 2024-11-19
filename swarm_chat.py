@@ -5,17 +5,18 @@ import asyncio
 import logging
 import random
 import secrets
+import os
 from contextlib import asynccontextmanager
 from datetime import datetime
 from typing import Dict, List, Optional, AsyncGenerator
+from logging.handlers import RotatingFileHandler
 
 # Third-party imports
 import uvicorn  # pylint: disable=import-error
-from fastapi import FastAPI, HTTPException, Depends, Cookie  # pylint: disable=import-error
+from fastapi import FastAPI, HTTPException, Depends, Cookie, Request  # pylint: disable=import-error
 from fastapi.responses import HTMLResponse  # pylint: disable=import-error
 from fastapi.staticfiles import StaticFiles  # pylint: disable=import-error
 from fastapi.security import HTTPBasic, HTTPBasicCredentials  # pylint: disable=import-error
-from fastapi.middleware.cors import CORSMiddleware # pylint: disable=import-error
 from pydantic import BaseModel  # pylint: disable=import-error
 from swarm import Swarm, Agent  # type: ignore # pylint: disable=import-error
 
@@ -34,7 +35,10 @@ from agents import (
     transfer_to_mencken
 )
 
-# Configure logging
+# Create logging directory if it doesn't exist
+os.makedirs("/var/log/swarm", exist_ok=True)
+
+# Configure main application logging
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -44,6 +48,25 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Configure access logger
+access_logger = logging.getLogger("swarm.access")
+access_logger.setLevel(logging.INFO)
+
+# Configure rotating file handler - 10MB per file, keep 5 backup files
+access_handler = RotatingFileHandler(
+    "/var/log/swarm/access.log",
+    maxBytes=10_485_760,  # 10MB
+    backupCount=5,
+    encoding='utf-8'
+)
+
+# Create formatter for access logs
+access_formatter = logging.Formatter(
+    '%(asctime)s - %(levelname)s - %(message)s'
+)
+access_handler.setFormatter(access_formatter)
+access_logger.addHandler(access_handler)
+
 # Set uvicorn access logger to only show startup and HTTP methods
 uvicorn_logger = logging.getLogger("uvicorn.access")
 uvicorn_logger.handlers = []
@@ -51,15 +74,6 @@ uvicorn_logger.addHandler(logging.StreamHandler())
 uvicorn_logger.setLevel(logging.WARNING)
 
 app = FastAPI()
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],  # In production, specify your mobile app's domain
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
 security = HTTPBasic()
 
 #pylint: disable=R0903
@@ -81,14 +95,7 @@ class UserSession:
         self.agent: Agent = triage_agent
         self.lock: asyncio.Lock = asyncio.Lock()
         self.first_message_handled: bool = False
-        
-        # Add initial greeting message from triage agent
-        initial_greeting = {
-            "role": "assistant",
-            "content": f"Hello {username}! Welcome to Swarm Chat. I'm the triage agent, and I'll be connecting you with various interesting personalities. How are you today?"
-        }
-        self.messages.append(initial_greeting)
-        logger.info("New session created for user: %s with initial greeting", username)
+        logger.info("New session created for user: %s", username)
 
     def select_random_agent(self) -> Agent:
         """Select and instantiate a random agent."""
@@ -109,6 +116,7 @@ class UserSession:
         logger.info("Selected random agent: %s", new_agent.name)
         return new_agent
 
+
 class SwarmChatManager:
     """Manager class for handling chat sessions."""
 
@@ -118,6 +126,25 @@ class SwarmChatManager:
         self.sessions_lock: asyncio.Lock = asyncio.Lock()
         self.tokens_lock: asyncio.Lock = asyncio.Lock()
         logger.info("SwarmChatManager initialized")
+
+    async def log_access(self, token: str, request: Request, message_type: str, content: str):
+        """Log access information"""
+        try:
+            async with self.tokens_lock:
+                username = self.tokens.get(token)
+                if not username:
+                    return
+
+            client_ip = request.client.host if request.client else "unknown"
+            log_message = (
+                f"IP: {client_ip} | "
+                f"User: {username} | "
+                f"Type: {message_type} | "
+                f"Content: {content}"
+            )
+            access_logger.info(log_message)
+        except Exception as e:
+            logger.error(f"Error logging access: {str(e)}")
 
     @asynccontextmanager
     async def get_session_safe(
@@ -175,12 +202,15 @@ class SwarmChatManager:
             logger.error("Session creation failed: %s", str(e))
             raise HTTPException(status_code=500, detail="Error creating session") from e
 
-    async def process_message(self, token: str, content: str) -> Optional[str]:
+    async def process_message(self, token: str, content: str, request: Request) -> Optional[str]:
         """Process a message and return the response."""
         if not token:
             raise HTTPException(status_code=401, detail="Not authenticated")
 
         try:
+            # Log user's prompt
+            await self.log_access(token, request, "prompt", content)
+
             async with self.get_session_safe(token) as session:
                 if not session:
                     raise HTTPException(status_code=401, detail="Invalid session")
@@ -202,7 +232,12 @@ class SwarmChatManager:
                     latest_message = response.messages[-1]
                     if latest_message.get("role") == "assistant":
                         session.messages = response.messages
-                        return latest_message.get("content")
+                        response_content = latest_message.get("content")
+                        
+                        # Log system's response
+                        await self.log_access(token, request, "response", response_content)
+                        
+                        return response_content
 
                 return None
 
@@ -257,30 +292,24 @@ async def login(credentials: HTTPBasicCredentials = Depends(security)) -> dict:
     try:
         logger.info("Login attempt: %s", credentials.username)
         token = await chat_manager.create_session(credentials.username)
-        
-        # Get the initial message from the session
-        async with chat_manager.get_session_safe(token) as session:
-            if not session:
-                raise HTTPException(status_code=401, detail="Invalid session")
-            initial_message = session.messages[0] if session.messages else None
-            
-        return {
-            "token": token, 
-            "username": credentials.username,
-            "initial_message": initial_message
-        }
+        return {"token": token, "username": credentials.username}
     except Exception as e:
         logger.error("Login failed: %s", str(e))
         raise HTTPException(status_code=500, detail="Login failed") from e
 
+
 @app.post("/chat")
-async def send_message(message: ChatMessage, token: str = Cookie(None)) -> dict:
+async def send_message(
+    message: ChatMessage, 
+    request: Request,
+    token: str = Cookie(None)
+) -> dict:
     """Handle chat messages."""
     if not token:
         raise HTTPException(status_code=401, detail="Not authenticated")
 
     logger.info("Processing chat message")
-    response = await chat_manager.process_message(token, message.content)
+    response = await chat_manager.process_message(token, message.content, request)
     return {"response": response}
 
 

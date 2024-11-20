@@ -9,11 +9,10 @@ from contextlib import asynccontextmanager
 from datetime import datetime
 from typing import Dict, List, Optional, AsyncGenerator
 from logging.handlers import RotatingFileHandler
+from fastapi.middleware.cors import CORSMiddleware
 
 import uvicorn
-from fastapi import FastAPI, HTTPException, Depends, Cookie, Request
-from fastapi.responses import HTMLResponse
-from fastapi.staticfiles import StaticFiles
+from fastapi import FastAPI, HTTPException, Depends, Request
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from pydantic import BaseModel
 from swarm import Swarm, Agent
@@ -33,14 +32,21 @@ from agents import (
 )
 
 # Create logging directory if it doesn't exist
-os.makedirs("/var/log/swarm", exist_ok=True)
+LOG_DIR = "/var/log/swarm"
+os.makedirs(LOG_DIR, exist_ok=True)
 
 # Configure main application logging
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     handlers=[
-        logging.FileHandler(f'swarm_chat_{datetime.now().strftime("%Y%m%d")}.log')
+        logging.StreamHandler(),  # Log to console
+        RotatingFileHandler(
+            os.path.join(LOG_DIR, "swarm_chat.log"),
+            maxBytes=10_485_760,  # 10MB
+            backupCount=5,
+            encoding='utf-8'
+        )
     ],
 )
 logger = logging.getLogger(__name__)
@@ -49,8 +55,8 @@ logger = logging.getLogger(__name__)
 access_logger = logging.getLogger("swarm.access")
 access_logger.setLevel(logging.INFO)
 access_handler = RotatingFileHandler(
-    "/var/log/swarm/access.log",
-    maxBytes=10_485_760,
+    os.path.join(LOG_DIR, "access.log"),
+    maxBytes=10_485_760,  # 10MB
     backupCount=5,
     encoding='utf-8'
 )
@@ -60,21 +66,68 @@ access_formatter = logging.Formatter(
 access_handler.setFormatter(access_formatter)
 access_logger.addHandler(access_handler)
 
+# Configure error logger
+error_logger = logging.getLogger("swarm.error")
+error_logger.setLevel(logging.ERROR)
+error_handler = RotatingFileHandler(
+    os.path.join(LOG_DIR, "error.log"),
+    maxBytes=10_485_760,
+    backupCount=5,
+    encoding='utf-8'
+)
+error_formatter = logging.Formatter(
+    '%(asctime)s - %(name)s - %(levelname)s - %(message)s\n'
+    'Exception: %(exc_info)s'
+)
+error_handler.setFormatter(error_formatter)
+error_logger.addHandler(error_handler)
+
 # Set uvicorn access logger
 uvicorn_logger = logging.getLogger("uvicorn.access")
 uvicorn_logger.handlers = []
-uvicorn_logger.addHandler(logging.StreamHandler())
-uvicorn_logger.setLevel(logging.WARNING)
+uvicorn_access_handler = RotatingFileHandler(
+    os.path.join(LOG_DIR, "uvicorn_access.log"),
+    maxBytes=10_485_760,
+    backupCount=5,
+    encoding='utf-8'
+)
+uvicorn_access_handler.setFormatter(logging.Formatter("%(asctime)s - %(levelname)s - %(message)s"))
+uvicorn_logger.addHandler(uvicorn_access_handler)
+uvicorn_logger.setLevel(logging.INFO)
 
-app = FastAPI()
-security = HTTPBasic()
-app.mount("/static", StaticFiles(directory="static"), name="static")
-
+# Pydantic Models
 class ChatMessage(BaseModel):
     """Model for chat messages."""
     content: str
     def __str__(self) -> str:
         return self.content
+
+class TokenResponse(BaseModel):
+    """Model for token responses."""
+    token: str
+    username: str
+
+class MessageResponse(BaseModel):
+    """Model for chat message responses."""
+    response: Optional[str]
+
+class HistoryResponse(BaseModel):
+    """Model for chat history responses."""
+    messages: List[Dict[str, str]]
+
+app = FastAPI()
+security = HTTPBasic()
+
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000",
+                   "http://swarmchat.me:3000",
+                   "http://0.0.0.0:3000"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 class UserSession:
     """Class to manage user sessions."""
@@ -149,6 +202,11 @@ class SwarmChatManager:
         except Exception as e:
             logger.error(f"Error logging access: {str(e)}")
 
+    async def get_token_username(self, token: str) -> Optional[str]:
+        """Get username associated with token."""
+        async with self.tokens_lock:
+            return self.tokens.get(token)
+
     @asynccontextmanager
     async def get_session_safe(
         self, token: str
@@ -160,15 +218,11 @@ class SwarmChatManager:
             return
 
         try:
-            username: Optional[str] = None
-            session: Optional[UserSession] = None
-
-            async with self.tokens_lock:
-                username = self.tokens.get(token)
-                if not username:
-                    logger.warning("Invalid token attempted: %s...", token[:8])
-                    yield None
-                    return
+            username = await self.get_token_username(token)
+            if not username:
+                logger.warning("Invalid token attempted: %s...", token[:8])
+                yield None
+                return
 
             async with self.sessions_lock:
                 session = self.sessions.get(username)
@@ -177,12 +231,12 @@ class SwarmChatManager:
                     yield None
                     return
 
-            async with session.lock:
-                logger.debug("Session acquired for user: %s", username)
-                try:
-                    yield session
-                finally:
-                    logger.debug("Session released for user: %s", username)
+                async with session.lock:
+                    logger.debug("Session acquired for user: %s", username)
+                    try:
+                        yield session
+                    finally:
+                        logger.debug("Session released for user: %s", username)
 
         except Exception as e:
             logger.error("Error in get_session_safe: %s", str(e))
@@ -196,7 +250,6 @@ class SwarmChatManager:
             async with self.sessions_lock:
                 session = UserSession(username)
                 self.sessions[username] = session
-                # Send first message immediately after creation
                 await session.send_first_message()
 
             async with self.tokens_lock:
@@ -208,11 +261,10 @@ class SwarmChatManager:
             logger.error("Session creation failed: %s", str(e))
             raise HTTPException(status_code=500, detail="Error creating session") from e
 
-    async def process_message(self, token: str, content: str, request: Request) -> Optional[str]:
+    async def process_message(
+        self, token: str, content: str, request: Request
+    ) -> Optional[str]:
         """Process a message and return the response."""
-        if not token:
-            raise HTTPException(status_code=401, detail="Not authenticated")
-
         try:
             await self.log_access(token, request, "prompt", content)
 
@@ -222,7 +274,6 @@ class SwarmChatManager:
 
                 session.messages.append({"role": "user", "content": content})
                 
-                # Select random agent after first message
                 if session.first_message_sent:
                     session.agent = session.select_random_agent()
                     logger.info("Using agent: %s", session.agent.name)
@@ -247,86 +298,65 @@ class SwarmChatManager:
                 status_code=500, detail=f"Error processing message: {str(e)}"
             ) from e
 
-    async def get_user_messages(self, token: str) -> List[dict]:
-        """Safely get user messages with proper locking."""
-        if not token:
-            logger.warning("No token provided for message retrieval")
-            raise HTTPException(status_code=401, detail="Not authenticated")
-        try:
-            async with self.get_session_safe(token) as session:
-                if not session:
-                    logger.warning("Invalid session for token: %s...", token[:8])
-                    raise HTTPException(status_code=401, detail="Invalid session")
-
-                logger.debug("Retrieving messages for session")
-                return session.messages.copy()
-
-        except Exception as e:
-            logger.error("Message retrieval error: %s", str(e))
-            raise HTTPException(
-                status_code=500, detail=f"Error retrieving messages: {str(e)}"
-            ) from e
-
 chat_manager = SwarmChatManager()
 
 # FastAPI routes
-app.mount("/static", StaticFiles(directory="static"), name="static")
-
-@app.get("/", response_class=HTMLResponse)
-async def get_chat_page() -> str:
-    """Serve the chat page."""
-    try:
-        with open("static/index.html", encoding='utf-8') as f:
-            return f.read()
-    except Exception as e:
-        logger.error("Error serving chat page: %s", str(e))
-        raise HTTPException(status_code=500, detail="Error serving chat page") from e
-
-@app.post("/login")
-async def login(credentials: HTTPBasicCredentials = Depends(security)) -> dict:
+@app.post("/api/login", response_model=TokenResponse)
+async def login(credentials: HTTPBasicCredentials = Depends(security)) -> TokenResponse:
     """Handle user login."""
     try:
         logger.info("Login attempt: %s", credentials.username)
         token = await chat_manager.create_session(credentials.username)
-        return {"token": token, "username": credentials.username}
+        return TokenResponse(token=token, username=credentials.username)
     except Exception as e:
         logger.error("Login failed: %s", str(e))
         raise HTTPException(status_code=500, detail="Login failed") from e
 
-@app.post("/chat")
-async def send_message(
-    message: ChatMessage, 
-    request: Request,
-    token: str = Cookie(None)
-) -> dict:
-    """Handle chat messages."""
-    if not token:
-        raise HTTPException(status_code=401, detail="Not authenticated")
+async def get_token_from_auth(request: Request) -> str:
+    """Extract token from Authorization header."""
+    auth = request.headers.get('Authorization')
+    if not auth or not auth.startswith('Bearer '):
+        raise HTTPException(
+            status_code=401,
+            detail="Missing or invalid authorization header"
+        )
+    return auth.split(' ')[1]
 
+@app.post("/api/chat", response_model=MessageResponse)
+async def send_message(
+    message: ChatMessage,
+    request: Request,
+    token: str = Depends(get_token_from_auth)
+) -> MessageResponse:
+    """Handle chat messages."""
     logger.info("Processing chat message")
     response = await chat_manager.process_message(token, message.content, request)
-    return {"response": response}
+    return MessageResponse(response=response)
 
-@app.get("/history")
-async def get_history(token: str = Cookie(None)) -> dict:
+@app.get("/api/history", response_model=HistoryResponse)
+async def get_history(token: str = Depends(get_token_from_auth)) -> HistoryResponse:
     """Get chat history."""
-    if not token:
-        logger.warning("History request without token")
-        raise HTTPException(status_code=401, detail="Not authenticated")
-
     logger.debug("Retrieving chat history")
-    messages = await chat_manager.get_user_messages(token)
-    return {"messages": messages}
+    async with chat_manager.get_session_safe(token) as session:
+        if not session:
+            raise HTTPException(status_code=401, detail="Invalid session")
+        return HistoryResponse(messages=session.messages)
 
 if __name__ == "__main__":
-    print("Starting Swarm Chat server...")
-    config = uvicorn.Config(
-        app, host="0.0.0.0", port=8000, log_level="warning", access_log=False
-    )
-    server = uvicorn.Server(config)
+    logger.info("Starting Swarm Chat server...")
     try:
+        config = uvicorn.Config(
+            app,
+            host="0.0.0.0",
+            port=8000,
+            log_level="info"
+        )
+        server = uvicorn.Server(config)
         server.run()
     except KeyboardInterrupt:
-        print("Server shutting down...")
+        logger.info("Server shutting down by user request...")
+    except Exception as e:
+        error_logger.error("Server crashed", exc_info=True)
+        raise
     finally:
-        print("Server shutdown complete")
+        logger.info("Server shutdown complete")

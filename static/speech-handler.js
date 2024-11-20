@@ -253,13 +253,19 @@ class SpeechHandler {
         }
     }
 
-    speak(text, character = 'Moderator') {
+    async speak(text, character = 'Moderator') {
         if (!this.synthesis) {
             alert('Speech synthesis is not supported in your browser.');
             return;
         }
         
         console.log(`Attempting to speak as character: ${character}`);
+        
+        // Temporarily stop recognition while speaking
+        const wasListening = this.isListening;
+        if (wasListening) {
+            this.stopListening();
+        }
         
         // Cancel any ongoing speech
         this.synthesis.cancel();
@@ -278,21 +284,40 @@ class SpeechHandler {
             utterance.lang = settings.preferredLang;
         }
 
-        // Debug logging
-        console.log('Speaking with settings:', {
-            character,
-            voice: utterance.voice?.name,
-            lang: utterance.voice?.lang || utterance.lang,
-            pitch: utterance.pitch,
-            rate: utterance.rate
+        // Return a promise that resolves when speech is complete
+        return new Promise((resolve) => {
+            utterance.onend = () => {
+                console.log('Finished speaking');
+                // Resume recognition if it was active before
+                if (wasListening) {
+                    setTimeout(() => {
+                        this.startListening(this.onSpeechCallback);
+                    }, 500); // Half second delay before resuming recognition
+                }
+                resolve();
+            };
+
+            utterance.onerror = (e) => {
+                console.error('Speech error:', e);
+                if (wasListening) {
+                    this.startListening(this.onSpeechCallback);
+                }
+                resolve();
+            };
+
+            utterance.onstart = () => console.log('Started speaking');
+
+            // Debug logging
+            console.log('Speaking with settings:', {
+                character,
+                voice: utterance.voice?.name,
+                lang: utterance.voice?.lang || utterance.lang,
+                pitch: utterance.pitch,
+                rate: utterance.rate
+            });
+
+            this.synthesis.speak(utterance);
         });
-
-        // Add event handlers for debugging
-        utterance.onstart = () => console.log('Started speaking');
-        utterance.onend = () => console.log('Finished speaking');
-        utterance.onerror = (e) => console.error('Speech error:', e);
-
-        this.synthesis.speak(utterance);
     }
 
     toggleSpeech(onSpeechCallback) {

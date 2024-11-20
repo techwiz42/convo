@@ -550,9 +550,34 @@
 
             // If it's an assistant message and TTS is enabled, speak the response
             if (role === 'assistant' && isTTSEnabled && speechHandler) {
-                console.log("Speaking assistant message");
-                speechHandler.speak(content);
-            }
+                // Detect character from the introduction
+                let character = "Moderator"; // default
+        
+                // Array of possible character names from agents.py
+                const characters = [
+                   "Hemmingway",
+                   "Pynchon",
+                   "Emily Dickenson",
+                   "Dale Carnegie",
+                   "H. L. Mencken",
+                   "A Freudian Psychoanalyst",
+                   "A flapper from the 1920s",
+                   "Bullwinkle J. Moose",
+                   "Yogi Berra",
+                   "Harbhajan Singh Khalsa"
+               ];
+
+               // Check content for character introduction
+               for (const char of characters) {
+                   if (content.includes(char)) {
+                      character = char;
+                      break;
+                   }
+               }
+
+               console.log(`Speaking as character: ${character}`);
+               speechHandler.speak(content, character);
+           }
         }
 
         function setResponding(isResponding) {

@@ -69,7 +69,7 @@ def transfer_to_yogi_bhajan() -> Agent:
 
 # Agent Definitions
 moderator = Agent(
-    name="Triage Agent",
+    name="Moderator",
     instructions=f"Transfer to agent whose name == {get_author()}. "
                 "Call this function after that agent's response",
 )

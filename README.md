@@ -152,8 +152,8 @@ new_agent = Agent(
 
 - Add persistent storage for chat history
 - Implement proper user authentication
-- Add agent-switching capabilities during conversations
 - Enhance personality traits and response patterns
+- Support for voices and accents is limited. Can be improved by training custom voices on an LLM.
 - Add conversation analytics
 - Implement proper error handling and recovery
 

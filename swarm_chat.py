@@ -68,6 +68,7 @@ uvicorn_logger.setLevel(logging.WARNING)
 
 app = FastAPI()
 security = HTTPBasic()
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
 class ChatMessage(BaseModel):
     """Model for chat messages."""

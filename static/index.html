@@ -211,6 +211,45 @@
             text-decoration: underline;
         }
 
+        /* Speech control styles */
+        #speech-controls {
+            display: flex;
+            justify-content: center;
+            gap: 1rem;
+            margin: 1rem 0;
+            padding: 10px;
+            background-color: #e3f2fd;
+            border: 1px solid #2196F3;
+            border-radius: 8px;
+        }
+
+        .speech-button {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 8px 16px;
+            border: 1px solid #ddd;
+            border-radius: 20px;
+            background: white;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            font-size: 14px;
+        }
+
+        .speech-button:hover {
+            background: #f5f5f5;
+        }
+
+        .speech-button.active {
+            background: #e3f2fd;
+            border-color: #2196F3;
+        }
+
+        .speech-button .icon {
+            font-size: 18px;
+        }
+
+        /* Typing indicator styles */
         @keyframes typing {
             0%, 100% { opacity: 0.3; }
             50% { opacity: 1; }
@@ -292,6 +331,18 @@
     </div>
 
     <div id="chat-container">
+        <!-- Speech controls -->
+        <div id="speech-controls">
+            <button id="voice-input-button" class="speech-button">
+                <span class="icon">🎤</span>
+                <span class="button-text">Start Voice Input</span>
+            </button>
+            <button id="text-to-speech-button" class="speech-button">
+                <span class="icon">🔊</span>
+                <span class="button-text">Enable Text-to-Speech</span>
+            </button>
+        </div>
+
         <div id="messages"></div>
         <div id="input-container">
             <input type="text" id="message-input" placeholder="Type a message...">
@@ -309,6 +360,99 @@
         let messagesDiv = document.getElementById('messages');
         let sendButton = document.getElementById('send-button');
         let exitButton = document.getElementById('exit-button');
+        let speechHandler = null;
+        let isListening = false;
+        let isTTSEnabled = false;
+
+        // Initialize speech handler with debug logging
+        async function initializeSpeech() {
+            console.log("Initializing speech...");
+            try {
+                const module = await import('/static/speech-handler.js');
+                console.log("Speech handler module loaded");
+        
+                speechHandler = new module.default();
+                console.log("Speech handler initialized");
+
+                const voiceInputButton = document.getElementById('voice-input-button');
+                const ttsButton = document.getElementById('text-to-speech-button');
+        
+                // Check for speech recognition support
+                const hasRecognition = ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window);
+                // Check for speech synthesis support
+                const hasSynthesis = 'speechSynthesis' in window;
+
+                console.log("Speech Recognition supported:", hasRecognition);
+                console.log("Speech Synthesis supported:", hasSynthesis);
+
+                if (!hasRecognition && !hasSynthesis) {
+                    // If neither is supported, hide the entire controls section
+                    const speechControls = document.getElementById('speech-controls');
+                    speechControls.style.display = 'none';
+                    return;
+                }
+
+                // Show/hide individual buttons based on support
+                if (!hasRecognition && voiceInputButton) {
+                    voiceInputButton.style.display = 'none';
+                }
+                if (!hasSynthesis && ttsButton) {
+                    ttsButton.style.display = 'none';
+                }
+
+                // Add event listeners only for supported features
+                if (hasRecognition && voiceInputButton) {
+                    voiceInputButton.addEventListener('click', toggleVoiceInput);
+                }
+                if (hasSynthesis && ttsButton) {
+                    ttsButton.addEventListener('click', toggleTTS);
+                }
+        
+                console.log("Speech initialization complete");
+
+            } catch (error) {
+                console.error('Speech initialization failed:', error);
+                const speechControls = document.getElementById('speech-controls');
+               if (speechControls) {
+                    speechControls.style.display = 'none';
+               }
+            }
+        }
+
+        function toggleVoiceInput() {
+            console.log("Toggle voice input called");
+            if (!speechHandler) return;
+            
+            const button = document.getElementById('voice-input-button');
+            isListening = !isListening;
+            
+            if (isListening) {
+                speechHandler.startListening((text) => {
+                    messageInput.value = text;
+                    sendMessage();
+                });
+                button.classList.add('active');
+                button.querySelector('.button-text').textContent = 'Stop Voice Input';
+                console.log("Voice input started");
+            } else {
+                speechHandler.stopListening();
+                button.classList.remove('active');
+                button.querySelector('.button-text').textContent = 'Start Voice Input';
+                console.log("Voice input stopped");
+            }
+        }
+
+        function toggleTTS() {
+            console.log("Toggle TTS called");
+            if (!speechHandler) return;
+            
+            const button = document.getElementById('text-to-speech-button');
+            isTTSEnabled = !isTTSEnabled;
+            button.classList.toggle('active');
+            button.querySelector('.button-text').textContent = 
+                isTTSEnabled ? 'Disable Text-to-Speech' : 'Enable Text-to-Speech';
+            console.log("TTS enabled:", isTTSEnabled);
+        }
 
         async function loadInitialMessage() {
             const welcomeDiv = document.createElement('div');
@@ -351,12 +495,12 @@
                 document.getElementById('exit-button').style.display = 'none';
                 const statusDot = document.querySelector('.status-dot');
                 const statusText = document.querySelector('.status-text');
-                statusDot.style.backgroundColor = '#ccc';
+		statusDot.style.backgroundColor = '#ccc';
                 statusText.textContent = 'Not Connected';
                 messagesDiv.innerHTML = '';
             }
         }
-        
+
         async function login() {
             const username = document.getElementById('username').value;
 
@@ -379,7 +523,7 @@
 
                 const data = await response.json();
                 document.cookie = `token=${data.token}; path=/`;
-                
+
                 document.getElementById('login-container').style.display = 'none';
                 document.getElementById('chat-container').style.display = 'block';
                 document.getElementById('exit-button').style.display = 'block';
@@ -388,6 +532,8 @@
                 statusDot.style.backgroundColor = '#00ff00';
                 statusText.textContent = `Connected as ${username}`;
 
+                // Initialize speech after login
+                await initializeSpeech();
                 await loadInitialMessage();
             } catch (error) {
                 console.error('Login error:', error);
@@ -401,6 +547,12 @@
             messageDiv.textContent = content;
             messagesDiv.appendChild(messageDiv);
             messagesDiv.scrollTop = messagesDiv.scrollHeight;
+
+            // If it's an assistant message and TTS is enabled, speak the response
+            if (role === 'assistant' && isTTSEnabled && speechHandler) {
+                console.log("Speaking assistant message");
+                speechHandler.speak(content);
+            }
         }
 
         function setResponding(isResponding) {
@@ -467,6 +619,9 @@
         });
 
         exitButton.addEventListener('click', exitSession);
+
+        // Initialize speech handler when the page loads
+        document.addEventListener('DOMContentLoaded', initializeSpeech);
     </script>
 </body>
 </html>

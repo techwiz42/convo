@@ -1,166 +1,193 @@
-# Swarm Chat
+# SwarmChat
 
-A FastAPI-based chat application that implements a swarm of conversational agents, each with distinct personalities inspired by famous authors and characters. The system dynamically routes conversations through different agents, creating an engaging and unpredictable chat experience.
+SwarmChat is an interactive chat application that lets users converse with a variety of AI personalities, each with their own unique writing style and perspective.
 
 ## Features
 
-- **Multi-Agent System**: Includes personalities such as:
-  - Ernest Hemingway
-  - Thomas Pynchon
-  - Emily Dickinson
-  - Dale Carnegie
-  - A Freudian Psychoanalyst
-  - A 1920s Flapper
+- Multiple AI personalities including Ernest Hemingway, Thomas Pynchon, Emily Dickinson, and others
+- Voice input and text-to-speech capabilities
+- Real-time chat interface with typing indicators
+- Secure authentication system
+- HTTPS/SSL support
+- Mobile-responsive design
 
-- **Dynamic Agent Selection**: Randomly assigns conversation handlers after each user response.
-- **Secure Session Management**: Implements token-based authentication
-- **Concurrent Chat Support**: Handles multiple simultaneous chat sessions with proper locking mechanisms
-- **WebSocket Integration**: Provides real-time chat functionality
-- **Message History**: Maintains conversation history per user session
+## Architecture
 
-**See SwarmChat online at http://swarmchat.me**
+SwarmChat consists of two main components:
+1. A FastAPI backend service that handles chat logic and AI interactions
+2. A React frontend for the user interface
 
-## Technical Architecture
+### Frontend (React)
 
-### Components
+The frontend is built with React and uses several modern web technologies:
 
-1. **FastAPI Server** (`swarm_chat.py`)
-   - Handles HTTP endpoints and WebSocket connections
-   - Manages user sessions and authentication
-   - Routes messages to appropriate agents
+- **UI Components**: Built using shadcn/ui components
+- **State Management**: Uses React hooks for local state
+- **Speech Features**: Implements browser Web Speech API for voice input and text-to-speech
+- **Styling**: Utilizes Tailwind CSS for responsive design
+- **HTTP Client**: Uses the Fetch API for communication with the backend
 
-2. **Agent System** (`agents.py`)
-   - Defines different agent personalities
-   - Implements agent selection and routing logic
-   - Manages agent state and transitions
+Key files:
+```
+frontend/
+├── src/
+│   ├── components/
+│   │   └── SwarmChat.jsx     # Main chat interface
+│   ├── lib/
+│   │   └── speech-handler.js # Speech recognition and synthesis
+│   └── App.jsx
+```
 
-3. **Frontend** (`static/index.html`)
-   - Provides web interface for chat
-   - Handles real-time updates and message display
+### Backend Services
 
-### Key Classes
+The application requires two systemd services to run:
 
-- `UserSession`: Manages individual user chat sessions
-- `SwarmChatManager`: Handles session management and message routing
-- `Agent`: Base class for implementing different chat personalities
+#### 1. SwarmChat API Service
 
-## Setup and Installation
+This service runs the FastAPI backend application.
+
+File: `/etc/systemd/system/swarmchat-api.service`
+```ini
+[Unit]
+Description=SwarmChat FastAPI Application
+After=network.target
+Wants=network-online.target
+
+[Service]
+User=peter
+Group=peter
+WorkingDirectory=/home/peter/convo
+EnvironmentFile=/etc/swarmchat/environment
+ExecStart=/home/peter/.virtualenvs/swarm/bin/uvicorn swarm_chat:app --host 127.0.0.1 --port 8000 --log-level info
+Restart=always
+StandardOutput=journal
+StandardError=journal
+```
+
+#### 2. SwarmChat Frontend Service
+
+This service serves the React frontend application.
+
+File: `/etc/systemd/system/swarmchat-frontend.service`
+```ini
+[Unit]
+Description=SwarmChat React Frontend
+After=network.target
+Wants=network-online.target
+
+[Service]
+User=peter
+Group=users
+WorkingDirectory=/home/peter/convo/frontend
+Environment=NODE_ENV=production
+Environment=PORT=3000
+Environment=REACT_APP_API_URL=https://swarmchat.me/api
+ExecStart=/usr/bin/npm start
+Restart=always
+StandardOutput=journal
+StandardError=journal
+```
+
+### NGINX Configuration
+
+NGINX is used to serve the React frontend and proxy API requests to the backend.
+
+File: `/etc/nginx/sites-available/swarmchat`
+```nginx
+server {
+    listen 443 ssl;
+    server_name swarmchat.me www.swarmchat.me;
+
+    # SSL configuration
+    ssl_certificate /etc/letsencrypt/live/swarmchat.me/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/swarmchat.me/privkey.pem;
+
+    # Serve React frontend
+    location / {
+        alias /home/peter/convo/frontend/build/;
+        try_files $uri $uri/ /index.html;
+    }
+
+    # Proxy API requests to FastAPI backend
+    location /api/ {
+        proxy_pass http://127.0.0.1:8000;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+    }
+}
+```
+
+## Installation
 
 1. Clone the repository:
 ```bash
-git clone <repository-url>
-cd swarm
+git clone https://github.com/yourusername/swarmchat.git
+cd swarmchat
 ```
 
-2. Install dependencies:
+2. Set up the Python virtual environment:
 ```bash
-pip install fastapi uvicorn pydantic
-or
-setup.py -r requirements.txt
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
 ```
 
-3. Start the server:
+3. Install frontend dependencies:
 ```bash
-python swarm_chat.py
+cd frontend
+npm install
+npm run build
 ```
 
-The application will be available at `http://localhost:8000`
-
-## Usage
-
-1. Access the web interface through your browser
-2. Log in with any username - password not required (authentication is currently simplified)
-3. Start chatting with the swarm of agents
-
-Each session will be assigned a random agent personality. The agent will be changed randomly during the conversation.
-
-## Testing
-A comprehensive test suite exists. To run tests:
-~~~
-# Run all tests
-pytest -v tests/test_swarm_chat.py
-
-# Run only performance tests
-pytest -v -m performance tests/test_swarm_chat.py
-
-# Run only security tests
-pytest -v -m security tests/test_swarm_chat.py
-~~~
-To run all tests in a class or a single test method in a class
-~~~
-# Run all tests in TestMessageHandling class
-pytest tests/test_swarm_chat.py::TestMessageHandling -v
-
-# Run all tests with "MessageHandling" in the name
-pytest -v -k "MessageHandling"
-
-# Run just the test_basic_message test in TestMessageHandling
-pytest tests/test_swarm_chat.py::TestMessageHandling::test_basic_message -v
-~~~
-Omit the -v for less verbose output.
-
-Before checking in: 
-* run pylint to verify pep-8 code compliance
-* run mypy --check-untyped-defs for syntax and static type check
-
-## Deployment
-The code runs as swarmchat.service in a DigitalOcean droplet. 
-It runs as a service in the NGINX web server.
-To restart the service   
-~~~
->sudo systemctl restart swarmchat.service
-~~~
-Check service status like so
-~~~
->sudo systemctl status swarmchat.service
-~~~
-And if the status is not 'running', get error output like so:
-~~~
->journalctl -u swarmchat -n 25
-~~~
-So far, the project is deployed manually as the procedure is not
-overly involved. Future development work would include creating
-a CI/CD pipeline.
-
-## Development
-lots to do.
-
-### Adding New Agents
-
-To add a new agent personality:
-
-1. Add the agent to the `authors` list in `agents.py`
-2. Create a new Agent class with appropriate instructions
-3. Add corresponding transfer functions
-4. Update the triage agent's function list
-
-Example:
-```python
-new_agent = Agent(
-    name="New Author",
-    instructions="Answer as New Author. Do not begin your answer with 'Ah'."
-)
+4. Configure environment:
+```bash
+sudo mkdir -p /etc/swarmchat
+sudo nano /etc/swarmchat/environment
+# Add your OpenAI API key:
+# OPENAI_API_KEY=your_key_here
 ```
 
-### Security Considerations
+5. Set up services:
+```bash
+sudo cp services/swarmchat-api.service /etc/systemd/system/
+sudo cp services/swarmchat-frontend.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable swarmchat-api swarmchat-frontend
+sudo systemctl start swarmchat-api swarmchat-frontend
+```
 
-- The current implementation uses basic authentication
-- Session tokens are generated using `secrets.token_urlsafe`
-- Proper authentication should be implemented for production use
+6. Configure NGINX:
+```bash
+sudo cp nginx/swarmchat /etc/nginx/sites-available/
+sudo ln -s /etc/nginx/sites-available/swarmchat /etc/nginx/sites-enabled/
+sudo nginx -t
+sudo systemctl restart nginx
+```
 
-## Future Improvements
+## Maintenance
 
-- Add persistent storage for chat history
-- Implement proper user authentication
-- Enhance personality traits and response patterns
-- Support for voices and accents is limited. Can be improved by training custom voices on an LLM.
-- Add conversation analytics
-- Implement proper error handling and recovery
+### Logs
+- Backend API logs: `sudo journalctl -u swarmchat-api -f`
+- Frontend logs: `sudo journalctl -u swarmchat-frontend -f`
+- NGINX access logs: `/var/log/nginx/swarmchat.access.log`
+- NGINX error logs: `/var/log/nginx/swarmchat.error.log`
 
-## License
+### Common Tasks
+- Restart services: `sudo systemctl restart swarmchat-api swarmchat-frontend`
+- Update frontend:
+  ```bash
+  cd frontend
+  git pull
+  npm install
+  npm run build
+  sudo systemctl restart swarmchat-frontend
+  ```
+- Check service status: `sudo systemctl status swarmchat-api swarmchat-frontend`
 
-None
+## Security Notes
 
-## Contributing
-
-Fork the repo and go nuts.
+- The OpenAI API key is stored in `/etc/swarmchat/environment` with 600 permissions
+- SSL certificates are managed by Let's Encrypt
+- All API requests are proxied through NGINX over HTTPS
+- Frontend build files are owned by www-data for NGINX access

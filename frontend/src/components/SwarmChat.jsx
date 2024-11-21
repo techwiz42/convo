@@ -1,20 +1,14 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { 
-  Dialog,
-  DialogContent, 
-  DialogHeader, 
-  DialogTitle 
-} from "./ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "./ui/dialog";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Card } from "./ui/card";
-import { MessageSquare, Send, LogOut, Github, Mail } from 'lucide-react';
+import { MessageSquare, Send, LogOut, Github, Mail, Mic, Volume2 } from 'lucide-react';
 import { twMerge } from "tailwind-merge";
 import { clsx } from "clsx";
-
+import { SpeechHandler, useSpeechStore } from '../lib/SpeechHandler';
 const cn = (...inputs) => twMerge(clsx(inputs));
-
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://0.0.0.0:8000/api';
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://swarmchat.me:8000/api';
 
 const SwarmChat = () => {
   const [isIntroOpen, setIsIntroOpen] = useState(true);
@@ -26,6 +20,12 @@ const SwarmChat = () => {
   const [error, setError] = useState(null);
   const messagesEndRef = useRef(null);
   const [token, setToken] = useState(null);
+  const speechHandlerRef = useRef(null);
+  const { isTTSEnabled, isListening, setTTSEnabled, setListening } = useSpeechStore();
+
+  useEffect(() => {
+    speechHandlerRef.current = new SpeechHandler();
+  }, []);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -42,9 +42,7 @@ const SwarmChat = () => {
     try {
       setIsLoading(true);
       setError(null);
-      console.log('Attempting to login to:', `${API_BASE_URL}/login`);
       
-      // Create Base64 encoded credentials
       const credentials = btoa(`${username}:dummy`);
       
       const response = await fetch(`${API_BASE_URL}/login`, {
@@ -61,14 +59,11 @@ const SwarmChat = () => {
       }
 
       const data = await response.json();
-      console.log('Login response:', data);
-      
       setToken(data.token);
       setIsConnected(true);
       await fetchHistory(data.token);
     } catch (err) {
-      console.error('Login error:', err);
-      setError(`Connection error: ${err.message}. Please make sure the server is running.`);
+      setError(`Connection error: ${err.message}`);
     } finally {
       setIsLoading(false);
     }
@@ -76,7 +71,6 @@ const SwarmChat = () => {
 
   const fetchHistory = async (currentToken) => {
     try {
-      console.log('Fetching history with token:', currentToken);
       const response = await fetch(`${API_BASE_URL}/history`, {
         headers: {
           'Authorization': `Bearer ${currentToken}`
@@ -90,7 +84,6 @@ const SwarmChat = () => {
       const data = await response.json();
       setMessages(data.messages);
     } catch (error) {
-      console.error('Error fetching history:', error);
       setError('Failed to load chat history. Please try refreshing.');
     }
   };
@@ -102,7 +95,6 @@ const SwarmChat = () => {
     try {
       setIsLoading(true);
       setError(null);
-      console.log('Sending message with token:', token);
       
       const response = await fetch(`${API_BASE_URL}/chat`, {
         method: 'POST',
@@ -118,13 +110,20 @@ const SwarmChat = () => {
       }
 
       const data = await response.json();
-      setMessages(prev => [...prev, 
-        { role: 'user', content: inputMessage },
-        { role: 'assistant', content: data.response }
-      ]);
+      
+      if (data.response) {
+        setMessages(prev => [...prev, 
+          { role: 'user', content: inputMessage },
+          { role: 'assistant', content: data.response }
+        ]);
+        
+        if (isTTSEnabled && speechHandlerRef.current) {
+          await speechHandlerRef.current.speak(data.response);
+        }
+      }
+      
       setInputMessage('');
     } catch (err) {
-      console.error('Message error:', err);
       setError(`Failed to send message: ${err.message}`);
     } finally {
       setIsLoading(false);
@@ -137,11 +136,28 @@ const SwarmChat = () => {
     setMessages([]);
     setUsername('');
     setError(null);
+    if (speechHandlerRef.current && isListening) {
+      speechHandlerRef.current.stopListening();
+      setListening(false);
+    }
+  };
+
+  const toggleSpeechRecognition = () => {
+    if (speechHandlerRef.current) {
+      const newListeningState = speechHandlerRef.current.toggleSpeech((text) => {
+        setInputMessage(text);
+        handleSendMessage({ preventDefault: () => {} });
+      });
+      setListening(newListeningState);
+    }
+  };
+
+  const toggleTTS = () => {
+    setTTSEnabled(!isTTSEnabled);
   };
 
   return (
     <div className="min-h-screen bg-gray-100 flex flex-col">
-      {/* Welcome Dialog */}
       <Dialog open={isIntroOpen} onOpenChange={setIsIntroOpen}>
         <DialogContent>
           <DialogHeader>
@@ -162,7 +178,6 @@ const SwarmChat = () => {
         </DialogContent>
       </Dialog>
 
-      {/* Status Bar */}
       <div className="bg-white shadow-sm p-4 flex justify-between items-center">
         <div className="flex items-center gap-2">
           <div className={cn(
@@ -173,16 +188,33 @@ const SwarmChat = () => {
           <span>{isConnected ? 'Connected' : 'Not Connected'}</span>
         </div>
         {isConnected && (
-          <Button variant="ghost" onClick={handleLogout} disabled={isLoading}>
-            <LogOut className="w-4 h-4 mr-2" />
-            Exit Session
-          </Button>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={toggleSpeechRecognition}
+              className={cn(isListening && "bg-blue-100")}
+            >
+              <Mic className="w-4 h-4" />
+            </Button>
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={toggleTTS}
+              className={cn(isTTSEnabled && "bg-blue-100")}
+            >
+              <Volume2 className="w-4 h-4" />
+            </Button>
+            <Button variant="ghost" onClick={handleLogout} disabled={isLoading}>
+              <LogOut className="w-4 h-4 mr-2" />
+              Exit Session
+            </Button>
+          </div>
         )}
       </div>
 
       <div className="flex-1 container mx-auto max-w-4xl p-4">
         {!isConnected ? (
-          // Login Container
           <Card className="p-6 space-y-6">
             <h2 className="text-2xl font-bold">Login to Swarm Chat</h2>
             <form onSubmit={handleLogin} className="space-y-4">
@@ -210,7 +242,6 @@ const SwarmChat = () => {
             </form>
           </Card>
         ) : (
-          // Chat Container
           <Card className="h-[calc(100vh-12rem)]">
             <div className="h-full flex flex-col">
               <div className="flex-1 overflow-y-auto p-4 space-y-4">
@@ -232,6 +263,17 @@ const SwarmChat = () => {
                   </div>
                 ))}
                 <div ref={messagesEndRef} />
+                {isLoading && (
+                  <div className="flex justify-start">
+                    <div className="bg-gray-100 text-gray-900 max-w-[80%] p-3 rounded-lg">
+                      <div className="flex gap-2">
+                        <div className="w-2 h-2 bg-gray-500 rounded-full animate-bounce" />
+                        <div className="w-2 h-2 bg-gray-500 rounded-full animate-bounce [animation-delay:-.3s]" />
+                        <div className="w-2 h-2 bg-gray-500 rounded-full animate-bounce [animation-delay:-.5s]" />
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
               <div className="p-4 border-t">
                 <form onSubmit={handleSendMessage} className="flex gap-2">
@@ -255,7 +297,6 @@ const SwarmChat = () => {
         )}
       </div>
 
-      {/* Footer */}
       <footer className="bg-white shadow-sm p-4 mt-auto">
         <div className="container mx-auto max-w-4xl flex justify-center gap-4 text-sm text-gray-600">
           <a

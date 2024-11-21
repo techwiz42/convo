@@ -123,6 +123,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:3000",
                    "http://swarmchat.me:3000",
+                   "http://swaarmchat.me",
                    "http://0.0.0.0:3000"],
     allow_credentials=True,
     allow_methods=["*"],
@@ -243,23 +244,50 @@ class SwarmChatManager:
             yield None
 
     async def create_session(self, username: str) -> str:
-        """Create a new session with proper locking."""
+        """Create a new session with proper locking and detailed logging."""
         try:
+            logger.info("Starting session creation for user: %s", username)
             token: str = secrets.token_urlsafe(32)
 
+            logger.debug("Created token for user %s: %s...", username, token[:8])
+
             async with self.sessions_lock:
-                session = UserSession(username)
-                self.sessions[username] = session
-                await session.send_first_message()
+                logger.debug("Acquired sessions lock for user: %s", username)
+                try:
+                    session = UserSession(username)
+                    self.sessions[username] = session
+                    logger.debug("Created UserSession object for user: %s", username)
+                
+                    init_message = await session.send_first_message()
+                    logger.debug("Sent first message for user %s: %s", username, init_message)
+                except Exception as session_error:
+                    logger.error(
+                        "Error during session object creation for user %s: %s",
+                        username,
+                        str(session_error),
+                        exc_info=True
+                    )
+                    raise
 
             async with self.tokens_lock:
+                logger.debug("Acquired tokens lock for user: %s", username)
                 self.tokens[token] = username
 
+            logger.info("Successfully created session for user: %s", username)
             return token
 
         except Exception as e:
-            logger.error("Session creation failed: %s", str(e))
-            raise HTTPException(status_code=500, detail="Error creating session") from e
+            logger.error(
+                "Session creation failed for user %s: %s",
+                username,
+                str(e),
+                exc_info=True
+            )
+            raise HTTPException(
+                status_code=500,
+                detail=f"Error creating session: {str(e)}"
+            ) from e
+
 
     async def process_message(
         self, token: str, content: str, request: Request
@@ -306,11 +334,47 @@ async def login(credentials: HTTPBasicCredentials = Depends(security)) -> TokenR
     """Handle user login."""
     try:
         logger.info("Login attempt: %s", credentials.username)
-        token = await chat_manager.create_session(credentials.username)
-        return TokenResponse(token=token, username=credentials.username)
+        
+        # Log session creation attempt
+        logger.info("Attempting to create session for user: %s", credentials.username)
+        
+        # Check if log directory is writable
+        if not os.access(LOG_DIR, os.W_OK):
+            logger.error("Log directory %s is not writable", LOG_DIR)
+            raise HTTPException(
+                status_code=500,
+                detail="Server configuration error: Log directory not writable"
+            )
+            
+        # Create session with detailed logging
+        try:
+            token = await chat_manager.create_session(credentials.username)
+            logger.info("Session created successfully for user: %s", credentials.username)
+            return TokenResponse(token=token, username=credentials.username)
+        except Exception as session_error:
+            logger.error(
+                "Session creation failed for user %s: %s",
+                credentials.username,
+                str(session_error),
+                exc_info=True
+            )
+            raise HTTPException(
+                status_code=500,
+                detail=f"Session creation failed: {str(session_error)}"
+            ) from session_error
+            
     except Exception as e:
-        logger.error("Login failed: %s", str(e))
-        raise HTTPException(status_code=500, detail="Login failed") from e
+        logger.error(
+            "Login failed for user %s: %s",
+            credentials.username,
+            str(e),
+            exc_info=True
+        )
+        # Return more specific error message
+        error_detail = f"Login failed: {str(e)}"
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=500, detail=error_detail) from e
 
 async def get_token_from_auth(request: Request) -> str:
     """Extract token from Authorization header."""

@@ -23,145 +23,124 @@ def get_author() -> str:
     """Get a random author from the AUTHORS list."""
     return random.choice(AUTHORS)
 
-def transfer_back_to_moderator() -> Agent:
+def create_moderator(username: str) -> Agent:
+    """Create the moderator agent with user context."""
+    return Agent(
+        name="Moderator",
+        instructions=f"Transfer to agent whose name == {get_author()}. "
+                    f"Address the user as {username} occasionally. "
+                    "Call this function after that agent's response"
+    )
+
+def transfer_back_to_moderator(username: str) -> Agent:
     """Return the moderator agent after each response."""
-    return moderator
+    return create_moderator(username)
 
-def transfer_to_hemmingway() -> Agent:
+def transfer_to_hemmingway(username: str) -> Agent:
     """Return the Hemmingway agent."""
-    return hemmingway_agent
+    return Agent(
+        name="Hemmingway",
+        instructions=f"Answer as Hemmingway. Address the user as {username} occasionally. "
+                    "Do not begin your answer with 'Ah'. Introduce yourself by agent name"
+    )
 
-def transfer_to_pynchon() -> Agent:
+def transfer_to_pynchon(username: str) -> Agent:
     """Return the Pynchon agent."""
-    return pynchon_agent
+    return Agent(
+        name="Pynchon",
+        instructions=f"Answer as Pynchon. Address the user as {username} occasionally. "
+                    "Do not begin your answer with 'Ah'. Introduce yourself by agent name"
+    )
 
-def transfer_to_dickinson() -> Agent:
+def transfer_to_dickinson(username: str) -> Agent:
     """Return the Dickinson agent."""
-    return dickinson_agent
+    return Agent(
+        name="Emily Dickenson",
+        instructions=f"Answer as Emily Dickenson. Address the user as {username} occasionally. "
+                    "Do not begin your answer with 'Ah'. Introduce yourself by agent name"
+    )
 
-def transfer_to_dale_carnegie() -> Agent:
+def transfer_to_dale_carnegie(username: str) -> Agent:
     """Return the Dale Carnegie agent."""
-    return positive_agent
+    return Agent(
+        name="Dale Carnegie",
+        instructions=f"Answer as Dale Carnegie. Address the user as {username} occasionally. "
+                    "Do not begin your answer with 'Ah'. Introduce yourself by agent name"
+    )
 
-def transfer_to_shrink() -> Agent:
+def transfer_to_shrink(username: str) -> Agent:
     """Return the psychoanalyst agent."""
-    return shrink_agent
+    return Agent(
+        name="A Freudian Psychoanalyst",
+        instructions=f"Answer as A Freudian Psychoanalyst. Address the user as {username} occasionally. "
+                    "Do not begin your answer with 'Ah'. Introduce yourself by agent name"
+    )
 
-def transfer_to_flapper() -> Agent:
+def transfer_to_flapper(username: str) -> Agent:
     """Return the flapper agent."""
-    return flapper_agent
+    return Agent(
+        name="A flapper from the 1920s", 
+        instructions=f"Answer as A Flapper from the 1920s. Address the user as {username} occasionally. "
+                    "Do not begin your answer with 'Ah'. Introduce yourself by agent name"
+    )
 
-def transfer_to_mencken() -> Agent:
+def transfer_to_mencken(username: str) -> Agent:
     """Return the Mencken agent."""
-    return mencken_agent
+    return Agent(
+        name="H. L. Mencken",
+        instructions=f"You are H. L. Mencken, a cynical and caustic journalist. "
+                    f"Address the user as {username} occasionally. "
+                    "Do not begin your answer by 'Ah'. "
+                    "Introduce yourself by agent name"
+    )
 
-def transfer_to_bullwinkle() -> Agent:
-    """Return the bullwinkle agent"""
-    return bullwinkle_agent
+def transfer_to_bullwinkle(username: str) -> Agent:
+    """Return the bullwinkle agent."""
+    return Agent(
+        name="Bullwinkle J. Moose",
+        instructions=f"""You are Bullwinkle J. Moose, a lovable but somewhat dim
+                    talking moose from Frostbite Falls, Minnesota. Address the user
+                    as {username} occasionally. You were the star of a cartoon show
+                    in the late fifties, early sixties. Now you are something of a
+                    has-been. You are likely to be found down at the dark end of
+                    the bar at Big Boris's Saloon and Whiskey Emporium nursing a 
+                    mug of sasparilla. Introduce yourself by agent name"""
+    )
 
-def transfer_to_yogi_berra() -> Agent:
-    """Return the yogi agent"""
-    return yogi_berra_agent
+def transfer_to_yogi_berra(username: str) -> Agent:
+    """Return the yogi agent."""
+    return Agent(
+        name="Yogi Berra",
+        instructions=f"""You were a catcher for the New York Yankees. You have
+                    a way with words. Address the user as {username} occasionally.
+                    Introduce yourself by agent name"""
+    )
 
-def transfer_to_yogi_bhajan() -> Agent:
-    """Return the yogi bhajan agent"""
-    return yogi_bhajan_agent
+def transfer_to_yogi_bhajan(username: str) -> Agent:
+    """Return the yogi bhajan agent."""
+    return Agent(
+        name="Harbhajan Singh Khalsa",
+        instructions=f"""You are Harbhajan Singh Khalsa, commonly known as Yogi
+                    Bhajan. You brought kundalini yoga to the USA. Address the 
+                    user as {username} occasionally. Yoga has been very good to
+                    you. Some might say that you are a cult leader. Your 
+                    intentions are pure, sort of. Introduce yourself by agent name."""
+    )
 
-# Agent Definitions
-moderator = Agent(
-    name="Moderator",
-    instructions=f"Transfer to agent whose name == {get_author()}. "
-                "Call this function after that agent's response",
-)
+# No global agent instances anymore since they need username context
 
-hemmingway_agent = Agent(
-    name="Hemmingway",
-    instructions="Answer as Hemmingway. Do not begin your answer with 'Ah'. "
-                "Introduce yourself by agent name"
-)
-
-pynchon_agent = Agent(
-    name="Pynchon",
-    instructions="Answer as Pynchon. Do not begin your answer with 'Ah'. "
-                "Introduce yourself by agent name"
-)
-
-dickinson_agent = Agent(
-    name="Emily Dickenson",
-    instructions="Answer as Emily Dickenson. Do not begin your answer with 'Ah'. "
-                "Introduce yourself by agent name"
-)
-
-positive_agent = Agent(
-    name="Dale Carnegie",
-    instructions="Answer as Dale Carnegie. Do not begin your answer with 'Ah'. "
-                "Introduce yourself by agent name"
-)
-
-shrink_agent = Agent(
-    name="A Freudian Psychoanalyst",
-    instructions="Answer as A Freudian Psychoanalyst. Do not begin your answer with 'Ah'. "
-                "Introduce yourself by agent name"
-)
-
-flapper_agent = Agent(
-    name="A flapper from the 1920s",
-    instructions="Answer as A Flapper from the 1920s. Do not begin your answer with 'Ah'. "
-                "Introduce yourself by agent name"
-)
-
-mencken_agent = Agent(
-    name="H. L. Mencken",
-    instructions="You are H. L. Mencken, a cynical and caustic journalist. "
-                "Do not begin your answer by 'Ah'. "
-                "Introduce yourself by agent name"
-)
-
-bullwinkle_agent = Agent(
-    name="Bullwinkle J. Moose",
-    instructions="""You are Bullwinkle J. Moose, a lovable but somewhat dim
-                    talking moose from Frostbite Falls, Minnesota. You were
-                    the star of a cartoon show in the late fifties, early
-                    sixties. Now you are something of a has-been. You are
-                    likely to be found down at the dark end of the bar at
-                    Big Boris's Saloon and Whiskey Emporium nursing a mug
-                    of sasparilla. Introduce yourself by agent name"""
-                    )
-
-yogi_berra_agent = Agent(
-    name="Yogi Berra",
-    instructions="""You were a catcher for the New York Yannkees. You have
-                    a way with words. Introduce yourself by agent name"""
-                    )
-
-yogi_bhajan_agent = Agent(
-    name="Harbhajan Singh Khalsa",
-    instructions="""You are Harbhajan Singh Khalsa, commonly known as Yogi
-                    Bhajan. You brought kundalini yoga to the USA. Yoga 
-                    has been very good to you. Some might say that you are
-                    a cult leader. Your intentions are pure, sort of. 
-                    Introduce yourself by agent name."""
-                    )
-
-
-# Configure agent functions
-moderator.functions = [
-    transfer_to_hemmingway,
-    transfer_to_pynchon,
-    transfer_to_dickinson,
-    transfer_to_mencken,
-    transfer_to_dale_carnegie,
-    transfer_to_shrink,
-    transfer_to_flapper,
-    transfer_to_bullwinkle,
-    transfer_to_yogi_berra,
-    transfer_to_yogi_bhajan,
-]
-
-# Add transfer back function to all agents
-for agent in [
-    hemmingway_agent, pynchon_agent, dickinson_agent,
-    shrink_agent, positive_agent, flapper_agent, mencken_agent,
-    bullwinkle_agent, yogi_berra_agent, yogi_bhajan_agent
-]:
-    agent.functions.append(transfer_back_to_moderator)
+# Function to create agent list for moderator
+def get_agent_functions(username: str):
+    """Get list of agent transfer functions with bound username."""
+    return [
+        lambda: transfer_to_hemmingway(username),
+        lambda: transfer_to_pynchon(username),
+        lambda: transfer_to_dickinson(username),
+        lambda: transfer_to_mencken(username),
+        lambda: transfer_to_dale_carnegie(username),
+        lambda: transfer_to_shrink(username),
+        lambda: transfer_to_flapper(username),
+        lambda: transfer_to_bullwinkle(username),
+        lambda: transfer_to_yogi_berra(username),
+        lambda: transfer_to_yogi_bhajan(username),
+    ]

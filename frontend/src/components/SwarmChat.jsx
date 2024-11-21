@@ -223,11 +223,11 @@ const SwarmChat = () => {
                 <Input
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
-                  placeholder="Enter any name to start"
+                  placeholder="Enter your name to start"
                   disabled={isLoading}
                 />
                 <p className="text-sm text-gray-500">
-                  No account required - just enter any name to start chatting!
+                  No account required - just enter your name to start chatting!
                 </p>
               </div>
               {error && (

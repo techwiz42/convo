@@ -19,7 +19,7 @@ from pydantic import BaseModel
 from swarm import Swarm, Agent
 
 from agents import (
-    moderator,
+    create_moderator,
     transfer_to_hemmingway,
     transfer_to_pynchon,
     transfer_to_dickinson,
@@ -29,7 +29,8 @@ from agents import (
     transfer_to_bullwinkle,
     transfer_to_yogi_berra,
     transfer_to_yogi_bhajan,
-    transfer_to_mencken
+    transfer_to_mencken,
+    get_agent_functions
 )
 
 # Create logging directory if it doesn't exist
@@ -135,9 +136,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-import traceback
-from fastapi import Request
-
 @app.middleware("http")
 async def log_errors(request: Request, call_next):
     try:
@@ -150,12 +148,20 @@ async def log_errors(request: Request, call_next):
 
 class UserSession:
     """Class to manage user sessions."""
+    
+    GREETINGS = [
+        "Hello {name}! I'm the moderator. What would you like to discuss today?",
+        "Welcome {name}! I'm here to guide our conversation. What's on your mind?", 
+        "Greetings {name}! I'm your moderator for today. How can I assist you?",
+        "Hi {name}! I'll be moderating our chat today. What would you like to explore?",
+        "Good to see you, {name}! I'm the moderator. What shall we talk about?"
+    ]
 
     def __init__(self, username: str):
         self.username: str = username
         self.messages: List[dict] = []
         self.client: Swarm = Swarm()
-        self.agent: Agent = moderator
+        self.agent: Agent = create_moderator(username)
         self.lock: asyncio.Lock = asyncio.Lock()
         self.first_message_sent: bool = False
         logger.info("New session created for user: %s", username)
@@ -164,7 +170,7 @@ class UserSession:
         """Send initial moderator message."""
         try:
             if not self.first_message_sent:
-                initial_message = "Hello, I'm the moderator. I'm here to help guide our conversation. What's on your mind today?"
+                initial_message = random.choice(self.GREETINGS).format(name=self.username)
                 self.messages.append({"role": "assistant", "content": initial_message})
                 self.first_message_sent = True
                 return initial_message
@@ -188,7 +194,7 @@ class UserSession:
             transfer_to_yogi_bhajan
         ]
         selected_func = random.choice(agents)
-        new_agent = selected_func()
+        new_agent = selected_func(self.username)
         logger.info("Selected random agent: %s", new_agent.name)
         return new_agent
 
@@ -306,7 +312,6 @@ class SwarmChatManager:
                 detail=f"Error creating session: {str(e)}"
             ) from e
 
-
     async def process_message(
         self, token: str, content: str, request: Request
     ) -> Optional[str]:
@@ -353,10 +358,6 @@ async def login(credentials: HTTPBasicCredentials = Depends(security)) -> TokenR
     try:
         logger.info("Login attempt: %s", credentials.username)
         
-        # Log session creation attempt
-        logger.info("Attempting to create session for user: %s", credentials.username)
-        
-        # Check if log directory is writable
         if not os.access(LOG_DIR, os.W_OK):
             logger.error("Log directory %s is not writable", LOG_DIR)
             raise HTTPException(
@@ -364,7 +365,6 @@ async def login(credentials: HTTPBasicCredentials = Depends(security)) -> TokenR
                 detail="Server configuration error: Log directory not writable"
             )
             
-        # Create session with detailed logging
         try:
             token = await chat_manager.create_session(credentials.username)
             logger.info("Session created successfully for user: %s", credentials.username)
@@ -388,7 +388,6 @@ async def login(credentials: HTTPBasicCredentials = Depends(security)) -> TokenR
             str(e),
             exc_info=True
         )
-        # Return more specific error message
         error_detail = f"Login failed: {str(e)}"
         if isinstance(e, HTTPException):
             raise e
@@ -427,14 +426,13 @@ async def get_history(token: str = Depends(get_token_from_auth)) -> HistoryRespo
 @app.get("/api/debug")
 async def debug_info():
     return {
-        "env_vars": {k: v[:4] + "..." if k == "OPENAI_API_KEY" else v 
+        "env_vars": {k: v[:4] + "..." if k == "OPENAI_API_KEY" else v
                      for k, v in os.environ.items()},
         "working_directory": os.getcwd(),
         "user": os.getuid(),
         "group": os.getgid(),
         "python_path": sys.path,
     }
-
 
 if __name__ == "__main__":
     logger.info("Starting Swarm Chat server...")

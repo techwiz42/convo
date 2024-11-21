@@ -8,7 +8,7 @@ import { twMerge } from "tailwind-merge";
 import { clsx } from "clsx";
 import { SpeechHandler, useSpeechStore } from '../lib/SpeechHandler';
 const cn = (...inputs) => twMerge(clsx(inputs));
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://swarmchat.me:8000/api';
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'https://swarmchat.me/api';
 
 const SwarmChat = () => {
   const [isIntroOpen, setIsIntroOpen] = useState(true);

@@ -1,17 +1,35 @@
 # /etc/nginx/sites-available/swarmchat
 
-#####################################################################
-# NOTE - This file must be edited to account for installation details.
-#####################################################################
+server {
+    # Redirect HTTP to HTTPS
+    listen 80;
+    server_name swarmchat.me www.swarmchat.me;
+    return 301 https://$server_name$request_uri;
+}
 
 server {
-    listen 80;
-    server_name 64.23.216.67;
+    # HTTPS configuration
+    listen 443 ssl;
+    server_name swarmchat.me www.swarmchat.me;
+
+    # SSL configuration from Let's Encrypt
+    ssl_certificate /etc/letsencrypt/live/swarmchat.me/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/swarmchat.me/privkey.pem;
+    include /etc/letsencrypt/options-ssl-nginx.conf;
+    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
 
     access_log /var/log/nginx/swarmchat.access.log;
     error_log /var/log/nginx/swarmchat.error.log;
 
+    # Serve React frontend
     location / {
+        root /home/peter/convo/frontend/build;  # Use 'dist' for Vite or 'build' for Create React App
+        index index.html;
+        try_files $uri $uri/ /index.html;
+    }
+
+    # Proxy API requests to FastAPI backend
+    location /api/ {
         proxy_pass http://127.0.0.1:8000;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;

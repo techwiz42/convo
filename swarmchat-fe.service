@@ -1,0 +1,23 @@
+[Unit]
+Description=SwarmChat React Frontend
+After=network.target
+Wants=network-online.target
+
+[Service]
+User=peter
+Group=users
+WorkingDirectory=/home/peter/convo/frontend
+Environment=NODE_ENV=production
+Environment=PORT=3000
+Environment=REACT_APP_API_URL=https://swarmchat.me/api
+ExecStart=/usr/bin/npm start
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+TimeoutStartSec=30
+TimeoutStopSec=5
+Type=simple
+
+[Install]
+WantedBy=multi-user.target

@@ -5,6 +5,7 @@ import logging
 import random
 import secrets
 import os
+import sys
 from contextlib import asynccontextmanager
 from datetime import datetime
 from typing import Dict, List, Optional, AsyncGenerator
@@ -34,6 +35,10 @@ from agents import (
 # Create logging directory if it doesn't exist
 LOG_DIR = "/var/log/swarm"
 os.makedirs(LOG_DIR, exist_ok=True)
+
+# Add this before the app starts
+print("OpenAI API Key status:", "Present" if os.getenv("OPENAI_API_KEY") else "Missing")
+print("Key starts with:", os.getenv("OPENAI_API_KEY")[:4] + "..." if os.getenv("OPENAI_API_KEY") else "None")
 
 # Configure main application logging
 logging.basicConfig(
@@ -129,6 +134,19 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+import traceback
+from fastapi import Request
+
+@app.middleware("http")
+async def log_errors(request: Request, call_next):
+    try:
+        return await call_next(request)
+    except Exception as e:
+        error_msg = f"Error processing request: {str(e)}\n"
+        error_msg += f"Traceback:\n{traceback.format_exc()}"
+        logger.error(error_msg)
+        raise
 
 class UserSession:
     """Class to manage user sessions."""
@@ -405,6 +423,18 @@ async def get_history(token: str = Depends(get_token_from_auth)) -> HistoryRespo
         if not session:
             raise HTTPException(status_code=401, detail="Invalid session")
         return HistoryResponse(messages=session.messages)
+
+@app.get("/api/debug")
+async def debug_info():
+    return {
+        "env_vars": {k: v[:4] + "..." if k == "OPENAI_API_KEY" else v 
+                     for k, v in os.environ.items()},
+        "working_directory": os.getcwd(),
+        "user": os.getuid(),
+        "group": os.getgid(),
+        "python_path": sys.path,
+    }
+
 
 if __name__ == "__main__":
     logger.info("Starting Swarm Chat server...")

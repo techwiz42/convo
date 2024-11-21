@@ -68,7 +68,7 @@ StandardError=journal
 
 This service serves the React frontend application.
 
-File: `/etc/systemd/system/swarmchat-frontend.service`
+File: `/etc/systemd/system/swarmchat-fe.service`
 ```ini
 [Unit]
 Description=SwarmChat React Frontend
@@ -151,10 +151,10 @@ sudo nano /etc/swarmchat/environment
 5. Set up services:
 ```bash
 sudo cp services/swarmchat-api.service /etc/systemd/system/
-sudo cp services/swarmchat-frontend.service /etc/systemd/system/
+sudo cp services/swarmchat-fe.service /etc/systemd/system/
 sudo systemctl daemon-reload
-sudo systemctl enable swarmchat-api swarmchat-frontend
-sudo systemctl start swarmchat-api swarmchat-frontend
+sudo systemctl enable swarmchat-api swarmchat-fe
+sudo systemctl start swarmchat-api swarmchat-fe
 ```
 
 6. Configure NGINX:
@@ -169,21 +169,21 @@ sudo systemctl restart nginx
 
 ### Logs
 - Backend API logs: `sudo journalctl -u swarmchat-api -f`
-- Frontend logs: `sudo journalctl -u swarmchat-frontend -f`
+- Frontend logs: `sudo journalctl -u swarmchat-fe -f`
 - NGINX access logs: `/var/log/nginx/swarmchat.access.log`
 - NGINX error logs: `/var/log/nginx/swarmchat.error.log`
 
 ### Common Tasks
-- Restart services: `sudo systemctl restart swarmchat-api swarmchat-frontend`
+- Restart services: `sudo systemctl restart swarmchat-api swarmchat-fe`
 - Update frontend:
   ```bash
   cd frontend
   git pull
   npm install
   npm run build
-  sudo systemctl restart swarmchat-frontend
+  sudo systemctl restart swarmchat-fe
   ```
-- Check service status: `sudo systemctl status swarmchat-api swarmchat-frontend`
+- Check service status: `sudo systemctl status swarmchat-api swarmchat-fe`
 
 ## Security Notes
 

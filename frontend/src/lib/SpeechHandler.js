@@ -11,8 +11,8 @@ class SpeechHandler {
   constructor() {
     if ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window) {
       this.recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
-      this.recognition.continuous = true;
-      this.recognition.interimResults = true;
+      this.recognition.continuous = false;
+      this.recognition.interimResults = false;
       this.recognition.maxAlternatives = 1;
       this.recognition.lang = 'en-US';
     }
@@ -57,7 +57,15 @@ class SpeechHandler {
       this.recognition.onresult = this.handleSpeechResult.bind(this);
       this.recognition.onend = () => {
         if (this.isListening) {
-          this.recognition.start();
+          setTimeout(() => {
+            try {
+              this.recognition.start();
+            } catch (error) {
+              if (error.name !== 'InvalidStateError') {
+                console.error('Speech recognition error:', error);
+              }
+            }
+          }, 100);
         }
       };
     }
@@ -92,12 +100,10 @@ class SpeechHandler {
   }
 
   handleSpeechResult(event) {
-    for (let i = event.resultIndex; i < event.results.length; ++i) {
-      if (event.results[i].isFinal) {
-        const finalText = event.results[i][0].transcript;
-        if (this.onSpeechCallback) {
-          this.onSpeechCallback(finalText);
-        }
+    if (event.results.length > 0) {
+      const finalText = event.results[0][0].transcript;
+      if (this.onSpeechCallback) {
+        this.onSpeechCallback(finalText, true);
       }
     }
   }
@@ -138,37 +144,35 @@ class SpeechHandler {
 
     this.synthesis.cancel();
 
-    const settings = this.characterVoices[character] || this.characterVoices["Moderator"];
-    const utterance = new SpeechSynthesisUtterance(text);
+    const sentences = text.match(/[^.!?]+[.!?]+/g) || [text];
     
-    utterance.voice = this.findVoiceForCharacter(character);
-    utterance.pitch = settings.pitch;
-    utterance.rate = settings.rate;
-    utterance.volume = 1.0;
+    for (const sentence of sentences) {
+      const settings = this.characterVoices[character] || this.characterVoices["Moderator"];
+      const utterance = new SpeechSynthesisUtterance(sentence.trim());
+      
+      utterance.voice = this.findVoiceForCharacter(character);
+      utterance.pitch = settings.pitch;
+      utterance.rate = settings.rate;
+      utterance.volume = 1.0;
 
-    if (!utterance.voice && settings.preferredLang) {
-      utterance.lang = settings.preferredLang;
+      if (!utterance.voice && settings.preferredLang) {
+        utterance.lang = settings.preferredLang;
+      }
+
+      await new Promise((resolve) => {
+        utterance.onend = resolve;
+        utterance.onerror = resolve;
+        this.synthesis.speak(utterance);
+      });
+
+      await new Promise(resolve => setTimeout(resolve, 200));
     }
 
-    return new Promise((resolve) => {
-      utterance.onend = () => {
-        if (wasListening) {
-          setTimeout(() => {
-            this.startListening(this.onSpeechCallback);
-          }, 500);
-        }
-        resolve();
-      };
-
-      utterance.onerror = () => {
-        if (wasListening) {
-          this.startListening(this.onSpeechCallback);
-        }
-        resolve();
-      };
-
-      this.synthesis.speak(utterance);
-    });
+    if (wasListening) {
+      setTimeout(() => {
+        this.startListening(this.onSpeechCallback);
+      }, 500);
+    }
   }
 
   toggleSpeech(onSpeechCallback) {

@@ -88,21 +88,24 @@ const SwarmChat = () => {
     }
   };
 
-  const handleSendMessage = async (e) => {
+  const handleSendMessage = async (e, autoSend = false) => {
     e?.preventDefault();
-    if (!inputMessage.trim() || !token || isLoading) return;
+    const currentMessage = inputMessage;  // Define at the start
+    if (!currentMessage.trim() || !token || isLoading) return;
 
     try {
       setIsLoading(true);
       setError(null);
       
+      setInputMessage('');
+
       const response = await fetch(`${API_BASE_URL}/chat`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify({ content: inputMessage })
+        body: JSON.stringify({ content: currentMessage })
       });
 
       if (!response.ok) {
@@ -113,7 +116,7 @@ const SwarmChat = () => {
       
       if (data.response) {
         setMessages(prev => [...prev, 
-          { role: 'user', content: inputMessage },
+          { role: 'user', content: currentMessage },
           { role: 'assistant', content: data.response }
         ]);
         
@@ -121,10 +124,9 @@ const SwarmChat = () => {
           await speechHandlerRef.current.speak(data.response);
         }
       }
-      
-      setInputMessage('');
     } catch (err) {
       setError(`Failed to send message: ${err.message}`);
+      setInputMessage(currentMessage);
     } finally {
       setIsLoading(false);
     }
@@ -144,9 +146,11 @@ const SwarmChat = () => {
 
   const toggleSpeechRecognition = () => {
     if (speechHandlerRef.current) {
-      const newListeningState = speechHandlerRef.current.toggleSpeech((text) => {
+      const newListeningState = speechHandlerRef.current.toggleSpeech((text, autoSend) => {
         setInputMessage(text);
-        handleSendMessage({ preventDefault: () => {} });
+        if (autoSend) {
+          handleSendMessage({ preventDefault: () => {} }, true);
+        }
       });
       setListening(newListeningState);
     }
@@ -223,11 +227,11 @@ const SwarmChat = () => {
                 <Input
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
-                  placeholder="Enter your name to start"
+                  placeholder="Enter any name to start"
                   disabled={isLoading}
                 />
                 <p className="text-sm text-gray-500">
-                  No account required - just enter your name to start chatting!
+                  No account required - just enter any name to start chatting!
                 </p>
               </div>
               {error && (

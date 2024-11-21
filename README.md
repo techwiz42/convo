@@ -1,5 +1,7 @@
 # SwarmChat
 
+**see it in action at https://swarmchat.me**
+
 SwarmChat is an interactive chat application that lets users converse with a variety of AI personalities, each with his or her own unique writing style and perspective.
 
 ## Features

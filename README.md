@@ -48,7 +48,7 @@ The application requires two systemd services to run:
 
 This service runs the FastAPI backend application.
 
-File: `/etc/systemd/system/swarmchat-api.service`
+File: `/etc/systemd/system/swarmchat-api-prod.service` (dev is similar)
 ```ini
 [Unit]
 Description=SwarmChat FastAPI Application
@@ -70,7 +70,7 @@ StandardError=journal
 
 This service serves the React frontend application.
 
-File: `/etc/systemd/system/swarmchat-fe.service`
+File: `/etc/systemd/system/swarmchat-fe-prod.service` (dev is similar)
 ```ini
 [Unit]
 Description=SwarmChat React Frontend

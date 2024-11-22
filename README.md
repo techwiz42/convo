@@ -120,6 +120,132 @@ server {
 }
 ```
 
+## Development Pipeline
+
+SwarmChat uses a development/production pipeline with parallel environments:
+
+### Directory Structure
+```bash
+/home/peter/
+├── convo/          # Production environment
+└── convo-dev/      # Development environment
+```
+
+### Initial Setup
+
+1. Clone the repository twice:
+```bash
+cd /home/peter
+git clone https://github.com/yourusername/swarmchat.git convo
+git clone https://github.com/yourusername/swarmchat.git convo-dev
+```
+
+2. Set up branches:
+```bash
+# In production directory
+cd /home/peter/convo
+git checkout main
+
+# In development directory
+cd /home/peter/convo-dev
+git checkout -b dev
+```
+
+3. Create virtual environments:
+```bash
+# Production environment
+python -m venv ~/.virtualenvs/swarm
+source ~/.virtualenvs/swarm/bin/activate
+pip install -r requirements.txt
+
+# Development environment
+python -m venv ~/.virtualenvs/swarm-dev
+source ~/.virtualenvs/swarm-dev/bin/activate
+pip install -r requirements.txt
+```
+
+### Development Workflow
+
+1. Make changes in the dev environment:
+```bash
+cd /home/peter/convo-dev
+git checkout dev
+# Make your changes
+git add .
+git commit -m "Description of changes"
+git push origin dev
+```
+
+2. Deploy to production:
+```bash
+# In production directory
+cd /home/peter/convo
+git checkout main
+git pull origin main
+git merge origin/dev
+git push origin main
+```
+
+### Deployment Script
+
+Create a deployment script (`deploy-to-prod.sh`):
+```bash
+#!/bin/bash
+
+echo "Deploying to production..."
+
+# Go to dev directory and get latest
+cd /home/peter/convo-dev
+git checkout dev
+git pull origin dev
+
+# Go to prod directory
+cd /home/peter/convo
+git checkout main
+git pull origin main
+
+# Merge dev into main
+git merge origin/dev
+
+# Push changes
+git push origin main
+
+# Rebuild frontend
+cd frontend
+npm run build
+
+# Restart services
+sudo systemctl restart swarmchat-api-prod
+sudo systemctl restart swarmchat-fe-prod
+
+echo "Deployment complete"
+```
+
+Make it executable:
+```bash
+chmod +x deploy-to-prod.sh
+```
+
+### Environment Configuration
+
+1. Production environment:
+```bash
+# /etc/swarmchat/environment
+OPENAI_API_KEY=your_key_here
+NODE_ENV=production
+PORT=3000
+REACT_APP_API_URL=https://swarmchat.me/api
+```
+
+2. Development environment:
+```bash
+# /etc/swarmchat/environment.dev
+OPENAI_API_KEY=your_key_here
+NODE_ENV=development
+PORT=3001
+REACT_APP_API_URL=https://dev.swarmchat.me/api
+```
+
 ## Installation
 
 1. Clone the repository:
@@ -166,6 +292,64 @@ sudo ln -s /etc/nginx/sites-available/swarmchat /etc/nginx/sites-enabled/
 sudo nginx -t
 sudo systemctl restart nginx
 ```
+
+## Testing
+
+SwarmChat includes a comprehensive testing suite using pytest for Python tests.
+
+### Running Tests
+
+```bash
+# Run the full test suite
+pytest tests/
+
+# Run specific test categories
+pytest tests/ -m "security"    # Security tests
+pytest tests/ -m "performance" # Performance tests
+pytest tests/ -m "integration" # Integration tests
+```
+
+### Test Categories
+
+- Unit Tests: Basic functionality testing
+- Integration Tests: Testing component interactions
+- Security Tests: Testing security features and vulnerabilities
+- Performance Tests: Testing system under load
+- Chaos Tests: Testing system resilience
+- Contract Tests: Validating API contracts
+- Property-Based Tests: Testing with generated inputs
+
+### Code Quality
+
+1. Run pylint for PEP-8 compliance:
+```bash
+pylint swarm_chat.py agents.py tests/*.py
+```
+
+2. Run mypy for static type checking:
+```bash
+mypy swarm_chat.py agents.py tests/*.py
+```
+
+### Test Fixtures
+
+The test suite includes fixtures for:
+- Session management
+- Mock agents
+- Rate limiting
+- Error scenarios
+- Large conversations
+- Concurrent operations
+
+### Monitoring Tests
+
+The test suite includes monitoring capabilities:
+- Log output validation
+- Metrics collection
+- Performance benchmarking
+- Resource usage tracking
+
+See `tests/test_swarm_chat.py` and `tests/test_swarm_chat_extended.py` for detailed test implementations.
 
 ## Maintenance
 

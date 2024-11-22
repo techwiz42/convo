@@ -1,43 +1,123 @@
 # /etc/nginx/sites-available/swarmchat
 
+# Redirect HTTP to HTTPS
 server {
-    # Redirect HTTP to HTTPS
     listen 80;
     server_name swarmchat.me www.swarmchat.me;
     return 301 https://$server_name$request_uri;
 }
 
+# HTTPS server
 server {
-    # HTTPS configuration
     listen 443 ssl;
     server_name swarmchat.me www.swarmchat.me;
 
-    # SSL configuration from Let's Encrypt
+    # SSL configuration
     ssl_certificate /etc/letsencrypt/live/swarmchat.me/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/swarmchat.me/privkey.pem;
-    include /etc/letsencrypt/options-ssl-nginx.conf;
-    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
 
+    # Additional recommended SSL settings
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers HIGH:!aNULL:!MD5;
+    ssl_prefer_server_ciphers on;
+    ssl_session_cache shared:SSL:10m;
+    ssl_session_timeout 10m;
+
+    # Logging
     access_log /var/log/nginx/swarmchat.access.log;
-    error_log /var/log/nginx/swarmchat.error.log;
+    error_log /var/log/nginx/swarmchat.error.log debug;
 
     # Serve React frontend
     location / {
-        root /home/peter/convo/frontend/build;  # Use 'dist' for Vite or 'build' for Create React App
+        alias /home/peter/convo/frontend/build/;
+        try_files $uri $uri/ /index.html;
+    }
+
+    # API proxy with CORS
+    location /api/ {
+        proxy_pass http://127.0.0.1:8000;
+        proxy_http_version 1.1;
+        
+        # CORS headers
+        add_header 'Access-Control-Allow-Origin' 'https://swarmchat.me' always;
+        add_header 'Access-Control-Allow-Methods' 'GET, POST, OPTIONS' always;
+        add_header 'Access-Control-Allow-Headers' 'DNT,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Range,Authorization' always;
+        add_header 'Access-Control-Expose-Headers' 'Content-Length,Content-Range' always;
+
+        # Handle OPTIONS method for CORS preflight
+        if ($request_method = 'OPTIONS') {
+            add_header 'Access-Control-Allow-Origin' 'https://swarmchat.me' always;
+            add_header 'Access-Control-Allow-Methods' 'GET, POST, OPTIONS' always;
+            add_header 'Access-Control-Allow-Headers' 'DNT,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Range,Authorization' always;
+            add_header 'Access-Control-Max-Age' 1728000;
+            add_header 'Content-Type' 'text/plain charset=UTF-8';
+            add_header 'Content-Length' 0;
+            return 204;
+        }
+
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        # Debug headers
+        add_header 'X-Debug-Message' 'API proxy reached' always;
+    }
+}
+
+server {
+    server_name dev.swarmchat.me;
+
+    location / {
+        root /home/peter/convo-dev/frontend/build;
         index index.html;
         try_files $uri $uri/ /index.html;
     }
 
-    # Proxy API requests to FastAPI backend
+    # API proxy with CORS for dev server
     location /api/ {
-        proxy_pass http://127.0.0.1:8000;
+        proxy_pass http://127.0.0.1:8001;  # Changed to dev server port
         proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection 'upgrade';
+        # CORS headers
+        add_header 'Access-Control-Allow-Origin' 'https://dev.swarmchat.me' always;  # Changed to dev domain
+        add_header 'Access-Control-Allow-Methods' 'GET, POST, OPTIONS' always;
+        add_header 'Access-Control-Allow-Headers' 'DNT,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Range,Authorization' always;
+        add_header 'Access-Control-Expose-Headers' 'Content-Length,Content-Range' always;
+        # Handle OPTIONS method for CORS preflight
+        if ($request_method = 'OPTIONS') {
+            add_header 'Access-Control-Allow-Origin' 'https://dev.swarmchat.me' always;  # Changed to dev domain
+            add_header 'Access-Control-Allow-Methods' 'GET, POST, OPTIONS' always;
+            add_header 'Access-Control-Allow-Headers' 'DNT,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Range,Authorization' always;
+            add_header 'Access-Control-Max-Age' 1728000;
+            add_header 'Content-Type' 'text/plain charset=UTF-8';
+            add_header 'Content-Length' 0;
+            return 204;
+        }
         proxy_set_header Host $host;
-        proxy_cache_bypass $http_upgrade;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
+        # Debug headers
+        add_header 'X-Debug-Message' 'Dev API proxy reached' always;  # Changed debug message
     }
+    listen 443 ssl; # managed by Certbot
+    ssl_certificate /etc/letsencrypt/live/dev.swarmchat.me/fullchain.pem; # managed by Certbot
+    ssl_certificate_key /etc/letsencrypt/live/dev.swarmchat.me/privkey.pem; # managed by Certbot
+    include /etc/letsencrypt/options-ssl-nginx.conf; # managed by Certbot
+    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem; # managed by Certbot
+
+}
+
+
+server {
+    if ($host = dev.swarmchat.me) {
+        return 301 https://$host$request_uri;
+    } # managed by Certbot
+
+
+    listen 80;
+    server_name dev.swarmchat.me;
+    return 404; # managed by Certbot
+
+
 }

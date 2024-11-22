@@ -1,5 +1,5 @@
 [Unit]
-Description=SwarmChat FastAPI Application
+Description=SwarmChat FastAPI Application (Production)
 After=network.target
 Wants=network-online.target
 

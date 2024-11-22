@@ -1,5 +1,5 @@
 [Unit]
-Description=SwarmChat React Frontend
+Description=SwarmChat React Frontend (Production)
 After=network.target
 Wants=network-online.target
 

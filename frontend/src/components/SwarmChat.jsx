@@ -217,34 +217,65 @@ const SwarmChat = () => {
       </div>
 
       <div className="flex-1 container mx-auto max-w-4xl p-4">
-        {!isConnected ? (
-          <Card className="p-6 space-y-6">
-            <h2 className="text-2xl font-bold">Login to Swarm Chat</h2>
-            <form onSubmit={handleLogin} className="space-y-4">
-              <div className="space-y-2">
-                <label className="block text-sm font-medium">Username</label>
-                <Input
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                  placeholder="Enter any name to start"
-                  disabled={isLoading}
-                />
-                <p className="text-sm text-gray-500">
-                  No account required - just enter any name to start chatting!
-                </p>
-              </div>
-              {error && (
-                <div className="p-3 text-sm text-red-600 bg-red-50 rounded-md">
-                  {error}
-                </div>
-              )}
-              <Button type="submit" disabled={isLoading}>
-                <MessageSquare className="w-4 h-4 mr-2" />
-                {isLoading ? 'Connecting...' : 'Start Chatting'}
-              </Button>
-            </form>
-          </Card>
-        ) : (
+{!isConnected ? (
+  <Card className="p-6 space-y-6">
+    <div className="flex justify-between items-center">
+      <h2 className="text-2xl font-bold">Login to Swarm Chat</h2>
+      <div className="flex gap-2">
+        <Button
+          variant="outline"
+          size="icon"
+          type="button"
+          onClick={() => {
+            if (speechHandlerRef.current) {
+              speechHandlerRef.current.toggleSpeech((text) => {
+                setUsername(text);
+                setListening(!isListening);
+              });
+            }
+          }}
+          className={cn(isListening && "bg-blue-100")}
+          title="Speech-to-text"
+        >
+          <Mic className="w-4 h-4" />
+        </Button>
+        <Button
+          variant="outline"
+          size="icon"
+          onClick={toggleTTS}
+          className={cn(isTTSEnabled && "bg-blue-100")}
+          title="Text-to-speech"
+        >
+          <Volume2 className="w-4 h-4" />
+        </Button>
+      </div>
+    </div>
+    <form onSubmit={handleLogin} className="space-y-4">
+      <div className="space-y-2">
+        <label className="block text-sm font-medium">Username</label>
+        <Input
+          value={username}
+          onChange={(e) => setUsername(e.target.value)}
+          placeholder="Enter any name to start"
+          disabled={isLoading}
+        />
+        <p className="text-sm text-gray-500">
+          No account required - just enter any name to start chatting!
+          {isListening && <span className="ml-2 text-blue-500">Listening...</span>}
+        </p>
+      </div>
+      {error && (
+        <div className="p-3 text-sm text-red-600 bg-red-50 rounded-md">
+          {error}
+        </div>
+      )}
+      <Button type="submit" disabled={isLoading}>
+        <MessageSquare className="w-4 h-4 mr-2" />
+        {isLoading ? 'Connecting...' : 'Start Chatting'}
+      </Button>
+    </form>
+  </Card>
+      ) : (
           <Card className="h-[calc(100vh-12rem)]">
             <div className="h-full flex flex-col">
               <div className="flex-1 overflow-y-auto p-4 space-y-4">

@@ -1,16 +1,20 @@
 [Unit]
+<<<<<<<< HEAD:swarmchat-api-prod.service
 Description=SwarmChat FastAPI Application (Production)
+========
+Description=SwarmChat FastAPI Application (Development)
+>>>>>>>> origin/dev:swarmchat-api-dev.service
 After=network.target
 Wants=network-online.target
 
 [Service]
 User=peter
 Group=users
-WorkingDirectory=/home/peter/convo
+WorkingDirectory=/home/peter/convo-dev
 Environment=LANG=en_US.UTF-8
 Environment=LC_ALL=en_US.UTF-8
 Environment=OPENAI_API_KEY={$OPENAI_API_KEY}
-ExecStart=/home/peter/.virtualenvs/swarm/bin/uvicorn swarm_chat:app --host 127.0.0.1 --port 8000 --log-level info
+ExecStart=/home/peter/.virtualenvs/swarm-dev/bin/uvicorn swarm_chat:app --host 127.0.0.1 --port 8001 --log-level debug
 Restart=always
 RestartSec=5
 StandardOutput=journal

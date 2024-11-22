@@ -1,15 +1,19 @@
 [Unit]
+<<<<<<<< HEAD:swarmchat-fe-prod.service
 Description=SwarmChat React Frontend (Production)
+========
+Description=SwarmChat React Frontend (Development)
+>>>>>>>> origin/dev:swarmchat-fe-dev.service
 After=network.target
 Wants=network-online.target
 
 [Service]
 User=peter
 Group=users
-WorkingDirectory=/home/peter/convo/frontend
-Environment=NODE_ENV=production
-Environment=PORT=3000
-Environment=REACT_APP_API_URL=https://swarmchat.me/api
+WorkingDirectory=/home/peter/convo-dev/frontend
+Environment=NODE_ENV=development
+Environment=PORT=3001
+Environment=REACT_APP_API_URL=https://dev.swarmchat.me/api
 ExecStart=/usr/bin/npm start
 Restart=always
 RestartSec=5

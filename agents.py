@@ -19,6 +19,8 @@ AUTHORS: List[str] = [
     "Yogi Bhajan"
 ]
 
+MODEL = "gpt-4o"
+
 def get_author() -> str:
     """Get a random author from the AUTHORS list."""
     return random.choice(AUTHORS)
@@ -27,6 +29,7 @@ def create_moderator(username: str) -> Agent:
     """Create the moderator agent with user context."""
     return Agent(
         name="Moderator",
+        model=MODEL,
         instructions=f"Transfer to agent whose name == {get_author()}. "
                     f"Address the user as {username} occasionally. "
                     "Call this function after that agent's response"
@@ -40,6 +43,7 @@ def transfer_to_hemmingway(username: str) -> Agent:
     """Return the Hemmingway agent."""
     return Agent(
         name="Hemmingway",
+        model=MODEL,
         instructions=f"Answer as Hemmingway. Address the user as {username} occasionally. "
                     "Do not begin your answer with 'Ah'. Introduce yourself by agent name"
     )
@@ -48,6 +52,7 @@ def transfer_to_pynchon(username: str) -> Agent:
     """Return the Pynchon agent."""
     return Agent(
         name="Pynchon",
+        model=MODEL,
         instructions=f"Answer as Pynchon. Address the user as {username} occasionally. "
                     "Do not begin your answer with 'Ah'. Introduce yourself by agent name"
     )
@@ -56,6 +61,7 @@ def transfer_to_dickinson(username: str) -> Agent:
     """Return the Dickinson agent."""
     return Agent(
         name="Emily Dickenson",
+        model=MODEL,
         instructions=f"Answer as Emily Dickenson. Address the user as {username} occasionally. "
                     "Do not begin your answer with 'Ah'. Introduce yourself by agent name"
     )
@@ -72,6 +78,7 @@ def transfer_to_shrink(username: str) -> Agent:
     """Return the psychoanalyst agent."""
     return Agent(
         name="A Freudian Psychoanalyst",
+        model=MODEL,
         instructions=f"Answer as A Freudian Psychoanalyst. Address the user as {username} occasionally. "
                     "Do not begin your answer with 'Ah'. Introduce yourself by agent name"
     )
@@ -88,6 +95,7 @@ def transfer_to_mencken(username: str) -> Agent:
     """Return the Mencken agent."""
     return Agent(
         name="H. L. Mencken",
+        model=MODEL,
         instructions=f"You are H. L. Mencken, a cynical and caustic journalist. "
                     f"Address the user as {username} occasionally. "
                     "Do not begin your answer by 'Ah'. "
@@ -98,6 +106,7 @@ def transfer_to_bullwinkle(username: str) -> Agent:
     """Return the bullwinkle agent."""
     return Agent(
         name="Bullwinkle J. Moose",
+        model=MODEL,
         instructions=f"""You are Bullwinkle J. Moose, a lovable but somewhat dim
                     talking moose from Frostbite Falls, Minnesota. Address the user
                     as {username} occasionally. You were the star of a cartoon show
@@ -111,6 +120,7 @@ def transfer_to_yogi_berra(username: str) -> Agent:
     """Return the yogi agent."""
     return Agent(
         name="Yogi Berra",
+        model=MODEL,
         instructions=f"""You were a catcher for the New York Yankees. You have
                     a way with words. Address the user as {username} occasionally.
                     Introduce yourself by agent name"""
@@ -120,6 +130,7 @@ def transfer_to_yogi_bhajan(username: str) -> Agent:
     """Return the yogi bhajan agent."""
     return Agent(
         name="Harbhajan Singh Khalsa",
+        model=MODEL,
         instructions=f"""You are Harbhajan Singh Khalsa, commonly known as Yogi
                     Bhajan. You brought kundalini yoga to the USA. Address the 
                     user as {username} occasionally. Yoga has been very good to

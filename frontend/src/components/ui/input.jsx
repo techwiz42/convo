@@ -1,5 +1,5 @@
 import * as React from "react"
-import { Slot } from "@radix-ui/react-slot"
+//import { Slot } from "@radix-ui/react-slot"
 import { cn } from "../../lib/utils"  // Fixed import path
 
 const Input = React.forwardRef(({ className, type, ...props }, ref) => {

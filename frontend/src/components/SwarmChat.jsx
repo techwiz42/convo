@@ -3,12 +3,13 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "./ui/dialog";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Card } from "./ui/card";
-import { MessageSquare, Send, LogOut, Github, Mail, Mic, Volume2 } from 'lucide-react';
+import { MessageSquare, Send, LogOut, Github, Mail, Mic, Volume2, VolumeX } from 'lucide-react';
 import { twMerge } from "tailwind-merge";
 import { clsx } from "clsx";
 import { SpeechHandler, useSpeechStore } from '../lib/SpeechHandler';
 const cn = (...inputs) => twMerge(clsx(inputs));
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'https://dev.swarmchat.me/api';
+
 const SwarmChat = () => {
   const [isIntroOpen, setIsIntroOpen] = useState(true);
   const [isConnected, setIsConnected] = useState(false);
@@ -17,6 +18,7 @@ const SwarmChat = () => {
   const [inputMessage, setInputMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [isSpeaking, setIsSpeaking] = useState(false);
   const messagesEndRef = useRef(null);
   const [token, setToken] = useState(null);
   const speechHandlerRef = useRef(null);
@@ -24,6 +26,19 @@ const SwarmChat = () => {
 
   useEffect(() => {
     speechHandlerRef.current = new SpeechHandler();
+    
+    if (window.speechSynthesis) {
+      const handleSpeechStart = () => setIsSpeaking(true);
+      const handleSpeechEnd = () => setIsSpeaking(false);
+      
+      window.speechSynthesis.addEventListener('start', handleSpeechStart);
+      window.speechSynthesis.addEventListener('end', handleSpeechEnd);
+      
+      return () => {
+        window.speechSynthesis.removeEventListener('start', handleSpeechStart);
+        window.speechSynthesis.removeEventListener('end', handleSpeechEnd);
+      };
+    }
   }, []);
 
   const scrollToBottom = () => {
@@ -89,7 +104,7 @@ const SwarmChat = () => {
 
   const handleSendMessage = async (e, autoSend = false) => {
     e?.preventDefault();
-    const currentMessage = inputMessage;  // Define at the start
+    const currentMessage = inputMessage;
     if (!currentMessage.trim() || !token || isLoading) return;
 
     try {
@@ -120,7 +135,11 @@ const SwarmChat = () => {
         ]);
         
         if (isTTSEnabled && speechHandlerRef.current) {
-          await speechHandlerRef.current.speak(data.response);
+          try {
+            await speechHandlerRef.current.speak(data.response);
+          } catch (err) {
+            console.error('TTS Error:', err);
+          }
         }
       }
     } catch (err) {
@@ -156,7 +175,55 @@ const SwarmChat = () => {
   };
 
   const toggleTTS = () => {
-    setTTSEnabled(!isTTSEnabled);
+    if (window.speechSynthesis) {
+      if (isTTSEnabled) {
+        window.speechSynthesis.cancel();
+      }
+      setTTSEnabled(!isTTSEnabled);
+    }
+  };
+
+const ActivityIndicator = () => {
+    if (isListening) {
+      return (
+        <div className="flex justify-start">
+          <div className="bg-red-50 text-red-900 max-w-[80%] p-3 rounded-lg">
+            <div className="flex items-center gap-2">
+              <Mic className="w-4 h-4 animate-pulse text-red-500" />
+              <div className="flex gap-2">
+                <div className="w-2 h-2 bg-red-500 rounded-full animate-bounce" />
+                <div className="w-2 h-2 bg-red-500 rounded-full animate-bounce [animation-delay:-.3s]" />
+                <div className="w-2 h-2 bg-red-500 rounded-full animate-bounce [animation-delay:-.5s]" />
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+    if (isLoading) {
+      return (
+        <div className="flex justify-start">
+          <div className="bg-gray-100 text-gray-900 max-w-[80%] p-3 rounded-lg">
+            <div className="flex gap-2">
+              <div className="w-2 h-2 bg-gray-500 rounded-full animate-bounce" />
+              <div className="w-2 h-2 bg-gray-500 rounded-full animate-bounce [animation-delay:-.3s]" />
+              <div className="w-2 h-2 bg-gray-500 rounded-full animate-bounce [animation-delay:-.5s]" />
+            </div>
+          </div>
+        </div>
+      );
+    }
+    if (isSpeaking) {
+      return (
+        <div className="flex justify-start">
+          <div className="bg-blue-100 text-blue-900 max-w-[80%] p-3 rounded-lg flex items-center gap-2">
+            <Volume2 className="w-4 h-4 animate-pulse" />
+            <span>Speaking...</span>
+          </div>
+        </div>
+      );
+    }
+    return null;
   };
 
   return (
@@ -206,7 +273,11 @@ const SwarmChat = () => {
               onClick={toggleTTS}
               className={cn(isTTSEnabled && "bg-blue-100")}
             >
-              <Volume2 className="w-4 h-4" />
+              {isTTSEnabled ? (
+                <Volume2 className={cn("w-4 h-4", isSpeaking && "animate-pulse")} />
+              ) : (
+                <VolumeX className="w-4 h-4" />
+              )}
             </Button>
             <Button variant="ghost" onClick={handleLogout} disabled={isLoading}>
               <LogOut className="w-4 h-4 mr-2" />
@@ -217,65 +288,62 @@ const SwarmChat = () => {
       </div>
 
       <div className="flex-1 container mx-auto max-w-4xl p-4">
-{!isConnected ? (
-  <Card className="p-6 space-y-6">
-    <div className="flex justify-between items-center">
-      <h2 className="text-2xl font-bold">Login to Swarm Chat</h2>
-      <div className="flex gap-2">
-        <Button
-          variant="outline"
-          size="icon"
-          type="button"
-          onClick={() => {
-            if (speechHandlerRef.current) {
-              speechHandlerRef.current.toggleSpeech((text) => {
-                setUsername(text);
-                setListening(!isListening);
-              });
-            }
-          }}
-          className={cn(isListening && "bg-blue-100")}
-          title="Speech-to-text"
-        >
-          <Mic className="w-4 h-4" />
-        </Button>
-        <Button
-          variant="outline"
-          size="icon"
-          onClick={toggleTTS}
-          className={cn(isTTSEnabled && "bg-blue-100")}
-          title="Text-to-speech"
-        >
-          <Volume2 className="w-4 h-4" />
-        </Button>
-      </div>
-    </div>
-    <form onSubmit={handleLogin} className="space-y-4">
-      <div className="space-y-2">
-        <label className="block text-sm font-medium">Username</label>
-        <Input
-          value={username}
-          onChange={(e) => setUsername(e.target.value)}
-          placeholder="Enter any name to start"
-          disabled={isLoading}
-        />
-        <p className="text-sm text-gray-500">
-          No account required - just enter any name to start chatting!
-          {isListening && <span className="ml-2 text-blue-500">Listening...</span>}
-        </p>
-      </div>
-      {error && (
-        <div className="p-3 text-sm text-red-600 bg-red-50 rounded-md">
-          {error}
-        </div>
-      )}
-      <Button type="submit" disabled={isLoading}>
-        <MessageSquare className="w-4 h-4 mr-2" />
-        {isLoading ? 'Connecting...' : 'Start Chatting'}
-      </Button>
-    </form>
-  </Card>
-      ) : (
+        {!isConnected ? (
+          <Card className="p-6 space-y-6">
+            <div className="flex justify-between items-center">
+              <h2 className="text-2xl font-bold">Login to Swarm Chat</h2>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="icon"
+                  type="button"
+                  onClick={toggleSpeechRecognition}
+                  className={cn(isListening && "bg-blue-100")}
+                  title="Speech-to-text"
+                >
+                  <Mic className="w-4 h-4" />
+                </Button>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={toggleTTS}
+                  className={cn(isTTSEnabled && "bg-blue-100")}
+                  title="Text-to-speech"
+                >
+                  {isTTSEnabled ? (
+                    <Volume2 className={cn("w-4 h-4", isSpeaking && "animate-pulse")} />
+                  ) : (
+                    <VolumeX className="w-4 h-4" />
+                  )}
+                </Button>
+              </div>
+            </div>
+            <form onSubmit={handleLogin} className="space-y-4">
+              <div className="space-y-2">
+                <label className="block text-sm font-medium">Username</label>
+                <Input
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  placeholder="Enter any name to start"
+                  disabled={isLoading}
+                />
+                <p className="text-sm text-gray-500">
+                  No account required - just enter any name to start chatting!
+                  {isListening && <span className="ml-2 text-blue-500">Listening...</span>}
+                </p>
+              </div>
+              {error && (
+                <div className="p-3 text-sm text-red-600 bg-red-50 rounded-md">
+                  {error}
+                </div>
+              )}
+              <Button type="submit" disabled={isLoading}>
+                <MessageSquare className="w-4 h-4 mr-2" />
+                {isLoading ? 'Connecting...' : 'Start Chatting'}
+              </Button>
+            </form>
+          </Card>
+        ) : (
           <Card className="h-[calc(100vh-12rem)]">
             <div className="h-full flex flex-col">
               <div className="flex-1 overflow-y-auto p-4 space-y-4">
@@ -297,17 +365,7 @@ const SwarmChat = () => {
                   </div>
                 ))}
                 <div ref={messagesEndRef} />
-                {isLoading && (
-                  <div className="flex justify-start">
-                    <div className="bg-gray-100 text-gray-900 max-w-[80%] p-3 rounded-lg">
-                      <div className="flex gap-2">
-                        <div className="w-2 h-2 bg-gray-500 rounded-full animate-bounce" />
-                        <div className="w-2 h-2 bg-gray-500 rounded-full animate-bounce [animation-delay:-.3s]" />
-                        <div className="w-2 h-2 bg-gray-500 rounded-full animate-bounce [animation-delay:-.5s]" />
-                      </div>
-                    </div>
-                  </div>
-                )}
+                <ActivityIndicator />
               </div>
               <div className="p-4 border-t">
                 <form onSubmit={handleSendMessage} className="flex gap-2">
